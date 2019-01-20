@@ -20,10 +20,10 @@ object SketchUtils {
     * Case class for storing a sketch as an object instance
     *
     * @param name     Name of sample
-    * @param kmerSize Kmer size
-    * @param kmers    Kmer set
+    * @param kmer_length Kmer size
+    * @param sketch    Kmer set
     */
-  case class RedwoodSketch(name: String, kmerSize: Int, kmers: Map[Int, Double])
+  case class RedwoodSketch(name: String, kmer_length: Int, sketch: Map[Int, Double])
 
   /**
     * Function to load a sketch file into a RedwoodSketch object
@@ -32,7 +32,7 @@ object SketchUtils {
     */
   def loadRedwoodSketch: File => RedwoodSketch = file => {
     //deserialize as instance of RedwoodSketch
-    deserialise(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
+    deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
   }
 
   /**
@@ -92,7 +92,7 @@ object SketchUtils {
       val sketch = sketches_map.get(key)
       assert(sketch.nonEmpty, "Could find corresponding sketch file for sample: " + key)
       //load sketch and extract kmer hashes
-      loadRedwoodSketch(sketch.get).kmers.keySet
+      loadRedwoodSketch(sketch.get).sketch.keySet
     }
 
     //iterate through all given samples and construct intersecting set
@@ -107,30 +107,4 @@ object SketchUtils {
     sketches_map.toList.filter(x => !names_set(x._1))
       .foldLeft(intersect) { case (acc_intersect, (name, sketch)) => acc_intersect.diff(fetch(name))}
   }
-
-  /**
-    * Function to load a mash sketch into a RedwoodSketch object
-    *
-    * @return RedwoodSketch
-    *
-  def mash2Rdw: File => RedwoodSketch = file => {
-    //get name
-    val name = getFileName(file)
-    //dump sketch using mash
-    val line = Process(Seq("mash", "info", "-d", file.getAbsolutePath)).!!
-    //get kmer size
-    val k_size = line.split("\n").find(_.replaceAll("\\s+", "").startsWith("\"kmer\":")).get.filter(_.isDigit).toInt
-    //construct hash set
-    val k_set = {
-      //remove all ines up to start of hashes
-      line.split("\n").dropWhile(x => !x.replaceAll("\\s+", "").startsWith("\"hashes\":")).drop(2)
-        //iterate through each line and parse as hash (INT), append to list
-        .foldLeft(List[Long]())((kmers, line) => {
-        val filtered = line.filter(_.isDigit)
-        if (filtered.isEmpty) kmers else filtered.toLong :: kmers
-      }).toSet
-    }
-    new RedwoodSketch(name, k_size, k_set)
-  }
-  */
 }

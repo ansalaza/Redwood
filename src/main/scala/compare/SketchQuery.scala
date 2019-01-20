@@ -13,7 +13,7 @@ import utilities.KmerTreeUtils.loadKmerTree
   *
   * Description:
   */
-object SketchClassifier {
+object SketchQuery {
 
   case class Config(
                      sketchFile: File = null,
@@ -49,29 +49,27 @@ object SketchClassifier {
     //load sketch
     val sketch = loadRedwoodSketch(config.sketchFile)
     //compute total kmers
-     val total_kmers = sketch.kmers.size
-    println(timeStamp + "Loaded sketch for " + sketch.name + " with " + total_kmers + " kmers of size " + sketch.kmerSize)
+     val total_kmers = sketch.sketch.size
+    println(timeStamp + "Loaded sketch for " + sketch.name + " with " + total_kmers + " kmers of size " + sketch.kmer_length)
     println(timeStamp + "Loading kmer-tree")
     //load tree
     val ktree = loadKmerTree(config.kmerTree)
     println(timeStamp + "--" + ktree.getLeafNames().size + " leafs and " + ktree.getKmerSetSizes().size + " clusters ")
     println(timeStamp + "Querying sketch for " + sketch.name)
     //compute weights for each strain using LCA of each kmer
-    val weights = sketch.kmers.keySet.toList.foldLeft(Map[String, Double]())((strain_weights,kmer) => {
+    val scores = sketch.sketch.keySet.toList.foldLeft(Map[String, Int]())((counts,kmer) => {
       //get lowest common ancestor
-      val leafs = ktree.queryLCA(kmer)
-      //assign weight to kmer
-      val weight = if(leafs.isEmpty) 0.0 else (1 / leafs.size.toDouble)
-      //update weights
-      leafs.foldLeft(strain_weights)((acc, strain) => acc + (strain -> (acc.getOrElse(strain, 0.0) + weight)))
-    }).toList.sortBy(-_._2)
+      val node = ktree.queryLCA(kmer)
+      //update counts
+      if(node.isEmpty) counts else counts + (node.get -> (counts.getOrElse(node.get, 0)+1))
+    }).toList.map(x => (x._1, x._2.toDouble / total_kmers)).sortBy(-_._2)
     //explained percentage
-    val explained_percentage = weights.foldLeft(0.0)((b,a) => a._2 + b) / total_kmers
+    val explained_percentage = scores.foldLeft(0.0)((b,a) => a._2 + b) / total_kmers
     println(timeStamp + "Fraction of kmers explained: " + explained_percentage)
     //create output file
     val pw = new PrintWriter(config.outputDir + "/" + config.prefix + ".txt")
     pw.println("Strain\tWeight")
-    weights.foreach{case(strain,weight) => pw.println(strain + "\t" + weight)}
+    scores.foreach{case(strain,weight) => pw.println(strain + "\t" + weight)}
     pw.close()
     println(timeStamp + "Successfully completed!")
   }

@@ -1,9 +1,8 @@
 package reference_population
 
 import java.io._
-import boopickle.Default._
-import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile}
-import utilities.KmerTreeClusteringUtils.{createDistanceMatrix, hierchicalClustering}
+import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, serialize,writeSerialized}
+import utilities.ClusteringUtils.{createDendogram, hierchicalClustering}
 
 /**
   * Author: Alex N. Salazar
@@ -53,21 +52,27 @@ object ConstructPopulationTree {
     val dendogram = {
       println(timeStamp + "Loading distance matrix")
       //load distance matrix
-      val tmp = createDistanceMatrix(config.matrix, config.sketchesFile, config.verbose)
-      println(timeStamp + "--Loaded matrix with " + tmp.labels.size + " samples and " + tmp.pairwise_leaf_dist.size +
+      val tmp = createDendogram(config.matrix, config.sketchesFile, config.verbose)
+      println(timeStamp + "--Loaded matrix with " + tmp.clusters.size + " samples and " + tmp.pairwise_leaf_dist.size +
         " values")
       println(timeStamp + "Clustering samples and constructing kmer-tree")
-      hierchicalClustering(tmp, tmp.sketch_map, config.verbose)
+      hierchicalClustering(tmp, 0, tmp.sketch_map, config.verbose)
     }
     println(timeStamp + "Writing to disk")
+    //serialize and write to disk
+    writeSerialized(dendogram, new File(config.outputDir + "/" + config.prefix + ".rdwt"))
+    println(timeStamp + "Successfuly")
+
+    /**
     //serialize to byte array
-    val buf = Pickle.intoBytes(dendogram).array()
+    val buf = serialize(dendogram)
     //create output file
     val pw = new BufferedOutputStream(new FileOutputStream(config.outputDir + "/" + config.prefix + ".rdwt"))
     //write bytes to output
     pw.write(buf)
     pw.close
     println(timeStamp + "Successfully completed!")
+      */
 
     //println(timeStamp + "--Deserializing")
     //println(Unpickle[Node].fromBytes(

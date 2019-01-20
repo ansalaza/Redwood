@@ -13,14 +13,16 @@ object Redwood {
 
     val help = (
       "Usage: java -jar ptolemy2.jar [tool]\n\n" +
-        "REDWOOD TOOLS\n" +
-        "sketch            Create sketch of a given FASTQ file(s).\n" +
-        "sketch-cluster    Creates automated scripts for 'sketch' command for a cluster.\n" +
-        "distance          Compute the jaccard distance matrix of two or more sketches.\n"+
+        "SKETCH\n" +
+        "sketch            Create a sketch for given sequence file.\n" +
+        "sketch-cluster    Create automated scripts for 'sketch' command for a cluster.\n\n" +
+        "DISTANCE\n" +
+        "distance          Compute the jaccard distance matrix of two or more sketches.\n\n"+
+        "KMER TREE\n" +
         "tree              Build kmer-based population tree from a given distance matrix.\n" +
+        "tree-drawer       Visualize a given tree.\n"+
         "tree-metrics      Obtain summary metrics for given kmer tree.\n" +
-        "classify          Query kmers from a sketch file againts a given kmer-tree.\n\n"
-
+        "query             Query kmers from a sketch against a given kmer-tree.\n\n"
       )
 
     if (args.length == 0) {
@@ -31,8 +33,9 @@ object Redwood {
         case "sketch-cluster" => sketch.BuildSketchUsingCluster.main(args.drop(1))
         case "distance" => compare.SketchDistance.main(args.drop(1))
         case "tree" => reference_population.ConstructPopulationTree.main(args.drop(1))
+        case "tree-drawer" => vizualization.TreeTracing.main(args.drop(1))
         case "tree-metrics" => reference_population.TreeMetrics.main(args.drop(1))
-        case "classify" => compare.SketchClassifier.main(args.drop(1))
+        case "query" => compare.SketchQuery.main(args.drop(1))
         case _ => println(help)
       }
     }

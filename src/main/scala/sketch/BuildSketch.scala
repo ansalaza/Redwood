@@ -5,7 +5,7 @@ import java.io.{File, PrintWriter}
 import atk.ProgressBar.progress
 import bloomfilter.CanGenerateHashFrom
 import bloomfilter.mutable.BloomFilter
-import utilities.FileHandling.{outputSketch, timeStamp, verifyDirectory, verifyFile}
+import utilities.FileHandling.{writeSerialized, timeStamp, verifyDirectory, verifyFile}
 import utilities.SequenceUtils._
 import utilities.SequenceFormatUtils.loadSequenceFile
 import utilities.SketchUtils.RedwoodSketch
@@ -248,7 +248,7 @@ object BuildSketch {
     //create redwood sketch object
     println(timeStamp + "Writing to disk")
     val redwood_sketch = new RedwoodSketch(config.sampleName, config.kmerSize, sketch_kmers)
-    outputSketch(redwood_sketch, new File(config.outputDir + "/" + config.sampleName + ".rdws"))
+    writeSerialized(redwood_sketch, new File(config.outputDir + "/" + config.sampleName + ".rdws"))
     println(timeStamp + "Successfully completed!")
   }
 

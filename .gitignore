@@ -1,0 +1,9 @@
+# Intellij stuff
+.idea/*
+
+# Sbt ignore
+target/
+META-INF/
+
+# Misc.
+src/main/scala/**/play.scala

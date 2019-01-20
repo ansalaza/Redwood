@@ -3,10 +3,11 @@ package compare
 import java.io.{File, PrintWriter}
 
 import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory, verifyFile}
-import utilities.SketchUtils.loadRedwoodSketch
+import utilities.SketchUtils.{RedwoodSketch, loadRedwoodSketch}
+import atk.ProgressBar.progress
+
 import scala.math.log
 import scala.annotation.tailrec
-
 import utilities.NumericalUtils.min
 
 /**
@@ -49,19 +50,20 @@ object SketchDistance {
       //check whether output directory exists
       verifyDirectory(config.outputDir)
       //get list of sketches from input parameter
+      println(timeStamp + "Loading sketches")
       val all_sketches = {
-        if (config.sketchFiles != null && config.pathsFile != null) {
+        if (config.sketchFiles == null && config.pathsFile == null) {
           assert(false, "Provide sketch files through '--sketch-files' or '--paths-file'")
-          List[File]()
+          List[RedwoodSketch]()
         }
         else if (config.sketchFiles != null) {
           config.sketchFiles.foreach(verifyFile(_))
-          config.sketchFiles.toList
+          config.sketchFiles.toList.map(loadRedwoodSketch(_))
         }
         else {
           val sketches = openFileWithIterator(config.pathsFile).toList.map(new File(_))
           sketches.foreach(verifyFile(_))
-          sketches
+          sketches.map(loadRedwoodSketch(_))
         }
       }
       assert(config.threads > 0, "Number of threads specified is a non-positive integer")
@@ -69,28 +71,23 @@ object SketchDistance {
     }
   }
 
-  def sketchDistance(sketches: List[File], config: Config): Unit = {
-    println(timeStamp + "Found " + sketches.size + " sketches")
+  def sketchDistance(sketches: List[RedwoodSketch], config: Config): Unit = {
+    println(timeStamp + "Loaded " + sketches.size + " sketches")
     //obtain sketch size to use
-    val (sketch_size, kmer_size, names) = {
-      //load sketches into 3-tuples: (name, sketch size, kmer size)
-      val tmp = sketches.map(sketch => {
-        val s = loadRedwoodSketch(sketch);
-        (s.name, s.kmers.size, s.kmerSize)
-      })
+    val (kmer_size, names) = {
       //group by kmer size
-      val kmer_sizes = tmp.groupBy(_._3)
+      val kmer_sizes = sketches.map(_.kmer_length).groupBy(identity)
       //sanity check
       assert(kmer_sizes.size == 1, "One more sketches have different kmer size:\n" + kmer_sizes.toList.mkString("\n"))
       //group by name, get counts for each name
-      val all_names = tmp.groupBy(_._1).mapValues(_.size)
-      val non_unique = all_names.filter(_._2 > 1)
+      val all_names = sketches.map(_.name).groupBy(identity).mapValues(_.size)
       //sanity check
-      assert(non_unique.isEmpty, "The following sketch names are not unique: " + all_names.keys.mkString(","))
+      assert(all_names.forall(_._2 == 1), "The following sketch names are not unique: " +
+        all_names.filter(_._2 > 1).map(_._1).mkString(","))
       //get min sketch size
-      (tmp.map(_._2).min, kmer_sizes.head._1, all_names.keys.toList)
+      (kmer_sizes.head._1, all_names.keys.toList)
     }
-    println(timeStamp + "Coputing pairwise-distances using sketch size of " + sketch_size + " kmers of size " + kmer_size)
+    println(timeStamp + "Performing pairwise mash distances")
     //create a map of all pairwise distances
     val distance_map = pairwiseDist(kmer_size)(sketches, List()).toMap
     println(timeStamp + "Writing to disk")
@@ -121,24 +118,21 @@ object SketchDistance {
     * @param distances Accumulating pairwise distances as 3-tuples
     * @return List of 3-tuples: (subj, target, jaccard distance)
     */
-  @tailrec def pairwiseDist(kmersize: Int)(remaining: List[File],
+  @tailrec def pairwiseDist(kmersize: Int)(remaining: List[RedwoodSketch],
                             distances: List[((String, String), Double)]
                            ): List[((String, String), Double)] = {
     remaining match {
       case Nil => distances
-      case (head :: tail) => {
-        //load subj sketch
-        val subj = loadRedwoodSketch(head)
+      case (subj :: tail) => {
         //iterate through remaining, and compute jaccard index
-        val updated_distances = tail.foldLeft(distances)((acc, _target) => {
-          //load target sketch
-          val target = loadRedwoodSketch(_target)
+        val updated_distances = tail.foldLeft(distances)((acc, target) => {
+          progress(1000)
           //get pairwise interaction
           val interaction = (subj.name, target.name)
           //compute union
-          val union = broderUnion(subj.kmers.keySet, target.kmers.keySet)
+          val union = broderUnion(subj.sketch.keySet, target.sketch.keySet)
           //compute intersection
-          val intersect = union.intersect(subj.kmers.keySet).intersect(target.kmers.keySet).size.toDouble
+          val intersect = union.intersect(subj.sketch.keySet).intersect(target.sketch.keySet).size.toDouble
           //compute jaccard distance
           val ji = (intersect / union.size)
           //compute mash distance

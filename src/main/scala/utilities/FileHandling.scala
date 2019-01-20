@@ -57,15 +57,15 @@ object FileHandling {
     assert(inputFile.exists() && inputFile.isFile(), message + ": " + inputFile.getAbsolutePath())
   }
 
-  def outputSketch(sketch: RedwoodSketch, outputFile: File): Unit = {
+  def writeSerialized(serialized: Any, outputFile: File): Unit = {
     //create output file
     val pw = new BufferedOutputStream(new FileOutputStream(outputFile))
-    pw.write(serialise(sketch))
+    pw.write(serialize(serialized))
     pw.flush()
     pw.close
   }
 
-  def serialise: Any => Array[Byte] = some_object => {
+  def serialize: Any => Array[Byte] = some_object => {
     val stream: ByteArrayOutputStream = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(stream)
     oos.writeObject(some_object)
@@ -75,7 +75,7 @@ object FileHandling {
   }
 
 
-  def deserialise: Array[Byte] => Any = some_byte_array => {
+  def deserialize: Array[Byte] => Any = some_byte_array => {
     val ois = new ObjectInputStream(new ByteArrayInputStream(some_byte_array))
     val value = ois.readObject
     ois.close()
