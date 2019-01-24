@@ -1,7 +1,7 @@
 package reference_population
 
 import java.io._
-import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, serialize,writeSerialized}
+import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSerialized}
 import utilities.ClusteringUtils.{createDendogram, hierchicalClustering}
 
 /**
@@ -61,7 +61,7 @@ object ConstructPopulationTree {
     println(timeStamp + "Writing to disk")
     //serialize and write to disk
     writeSerialized(dendogram, new File(config.outputDir + "/" + config.prefix + ".rdwt"))
-    println(timeStamp + "Successfuly")
+    println(timeStamp + "Successfully completed!")
 
     /**
     //serialize to byte array

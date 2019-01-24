@@ -17,7 +17,8 @@ object Redwood {
         "sketch            Create a sketch for given sequence file.\n" +
         "sketch-cluster    Create automated scripts for 'sketch' command for a cluster.\n\n" +
         "DISTANCE\n" +
-        "distance          Compute the jaccard distance matrix of two or more sketches.\n\n"+
+        "distance          Compute the mash distance matrix of two or more sketches.\n"+
+        "update            Update existing mash distance matrix with new sketches.\n\n" +
         "KMER TREE\n" +
         "tree              Build kmer-based population tree from a given distance matrix.\n" +
         "tree-drawer       Visualize a given tree.\n"+
@@ -32,10 +33,13 @@ object Redwood {
         case "sketch" => sketch.BuildSketch.main(args.drop(1))
         case "sketch-cluster" => sketch.BuildSketchUsingCluster.main(args.drop(1))
         case "distance" => compare.SketchDistance.main(args.drop(1))
+        case "update" => compare.UpdateMatrix.main(args.drop(1))
         case "tree" => reference_population.ConstructPopulationTree.main(args.drop(1))
         case "tree-drawer" => vizualization.TreeTracing.main(args.drop(1))
         case "tree-metrics" => reference_population.TreeMetrics.main(args.drop(1))
         case "query" => compare.SketchQuery.main(args.drop(1))
+
+        case "prep-data" => sketch.PrepareData.main(args.drop(1))
         case _ => println(help)
       }
     }

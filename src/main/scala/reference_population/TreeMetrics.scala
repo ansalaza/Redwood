@@ -52,8 +52,10 @@ object TreeMetrics {
     val pw = new PrintWriter(config.outputDir + "/" + config.prefix + ".txt")
     //output header
     pw.println("Kmers\tLeafs\tIdentifier")
+    //id to leafs
+    val node2leafs = ktree.id2Leafnames().toMap.mapValues(_.size)
     //output metrics
-    set_sizes.foreach(cluster => pw.println(cluster._2 + "\t" + (cluster._1.count(_ == ',') + 1) + "\t" + cluster._1))
+    set_sizes.foreach(cluster => pw.println(cluster._2 + "\t" + node2leafs(cluster._1) + "\t" + cluster._1))
     pw.close
     println(timeStamp + "Successfully completed!")
   }

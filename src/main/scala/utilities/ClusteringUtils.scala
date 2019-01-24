@@ -40,7 +40,7 @@ object ClusteringUtils {
       val all_leafs = matrix.head.tail.zipWithIndex
       //log
       if (sketches_file != null)
-        println(timeStamp + "--Loading kmers into for " + all_leafs.size + " leafs")
+        println(timeStamp + "--Loading kmers for " + all_leafs.size + " leafs")
       //iterate through each leaf and construct leaf object (with unique kmers if specified)
       all_leafs.map(x => {
         //sketches provided, move on
@@ -147,22 +147,5 @@ object ClusteringUtils {
         verbose)
     }
   }
-
-  /**
-    * Function to create name of a given node by concatanating all leaf names in lexicographic order
-    *
-    * @return String
-    */
-  private def getNodeName: Tree[Kmers] => String = tree => tree.getLeafNames().sorted.mkString(",")
-
-  /**
-    * Function to order two trees lexicographically as 2-tupes where the left-most element is the smallest tree
-    *
-    * @return 2-tuple (Tree[Kmers], Tree[Kmers])
-    */
-  private def orderTrees: (Tree[Kmers], Tree[Kmers]) => (Tree[Kmers], Tree[Kmers]) = (x, y) => {
-    if (getNodeName(x) < getNodeName(y)) (x, y) else (y, x)
-  }
-
 
 }

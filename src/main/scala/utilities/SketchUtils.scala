@@ -4,8 +4,7 @@ import java.io.File
 import java.nio.file.{Files, Paths}
 
 import utilities.FileHandling._
-
-import scala.sys.process.Process
+import utilities.SequenceUtils.ByteEncoded
 
 /**
   * Author: Alex N. Salazar
@@ -19,11 +18,11 @@ object SketchUtils {
   /**
     * Case class for storing a sketch as an object instance
     *
-    * @param name     Name of sample
+    * @param name        Name of sample
     * @param kmer_length Kmer size
-    * @param sketch    Kmer set
+    * @param sketch      Kmer set
     */
-  case class RedwoodSketch(name: String, kmer_length: Int, sketch: Map[Int, Double])
+  case class RedwoodSketch(name: String, kmer_length: Int, sketch: Map[Int, (Int, ByteEncoded)])
 
   /**
     * Function to load a sketch file into a RedwoodSketch object
@@ -33,6 +32,30 @@ object SketchUtils {
   def loadRedwoodSketch: File => RedwoodSketch = file => {
     //deserialize as instance of RedwoodSketch
     deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
+  }
+
+  /**
+    * Load and verify sketches (existence, uniqueness, kmer-length compatability) for given list of files
+    *
+    * @param _sketches
+    * @return 2-tuple: (Map[String, Set[Int], Kmer length)
+    */
+  def loadVerifySketches(_sketches: List[File]): (Map[String, Set[Int]], Int) = {
+    //verify file exists
+    _sketches.foreach(verifyFile(_))
+    //load sketches
+    val sketches = _sketches.map(loadRedwoodSketch(_))
+    //group by kmer length
+    val kmer_lengths = sketches.map(x => (x.name, x.kmer_length)).groupBy(_._2).mapValues(_.map(_._1)).toList.sortBy(_._2.size)
+    //sanity check
+    assert(kmer_lengths.size == 1, "One more sketches have different kmer lengths:\n" +
+      kmer_lengths.drop(1).map(x => "--kmer length of " + x._1 + " for samples: " + x._2.mkString(",")))
+    //group by name, get counts for each name
+    val all_names = sketches.map(_.name).groupBy(identity).mapValues(_.size)
+    //sanity check
+    assert(all_names.forall(_._2 == 1), "The following sketch names are not unique: " +
+      all_names.filter(_._2 > 1).map(_._1).mkString(","))
+    (sketches.map(x => (x.name, x.sketch.keySet)).toMap, kmer_lengths.head._1)
   }
 
   /**
@@ -105,6 +128,6 @@ object SketchUtils {
     val names_set = names.toSet
     //iteratively perform set difference between the sample intersect above and all other samples
     sketches_map.toList.filter(x => !names_set(x._1))
-      .foldLeft(intersect) { case (acc_intersect, (name, sketch)) => acc_intersect.diff(fetch(name))}
+      .foldLeft(intersect) { case (acc_intersect, (name, sketch)) => acc_intersect.diff(fetch(name)) }
   }
 }

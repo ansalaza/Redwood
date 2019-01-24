@@ -23,6 +23,23 @@ object KmerTreeUtils {
   sealed trait Tree[+Kmers] {
 
     /**
+      * Method to obtain the tree level (depth) of all nodes/leafs
+      * @param tree
+      * @tparam Kmers
+      * @return List[(String,Int)]
+      */
+    def node2Levels[Kmers](tree: Tree[Kmers] = this): List[(String, Int)] = {
+      def _node2Levels[Kmers](current: Tree[Kmers], level: Int, acc: List[(String,Int)]): List[(String,Int)] = {
+        current match {
+          case Leaf(a,b) => (b,level) :: acc
+          case Node(i,a,d,l,r) =>
+            (i.toString, level) :: (_node2Levels(l, level+1, acc) ::: _node2Levels(r, level+1, acc))
+        }
+      }
+      _node2Levels(tree, 0, List())
+    }
+
+    /**
       * Method to obtain leaf-names in post-order traversal of a given tree
       *
       * @param tree Tree of type Kmers

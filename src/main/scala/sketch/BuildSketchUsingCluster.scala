@@ -21,14 +21,16 @@ object BuildSketchUsingCluster {
                      kmerSize: Int = 21,
                      maxMemory: Int = 20000,
                      sketchSize: Int = 100000,
+                     isAssembly: Boolean = false,
+                     trackCov: Boolean = false,
                      clusterConfig: File = null)
 
   def main(args: Array[String]) {
-    val parser = new scopt.OptionParser[Config]("sketches-cluster") {
+    val parser = new scopt.OptionParser[Config]("sketch-cluster") {
       opt[File]('l', "libraries") required() action { (x, c) =>
         c.copy(libraries = x)
-      } text ("Tab-delimited file containing sample name, forward reads, and reverse reads (if paired end). One " +
-        "entry per line.")
+      } text ("Tab-delimited file containing sample name, assembly, forward reads, and/or reverse reads (if paired " +
+        "end). One entry per line.")
       opt[File]("redwood-binary") required() action { (x, c) =>
         c.copy(redwoodBinary = x)
       } text ("Full path to redwood jar file.")
@@ -42,6 +44,12 @@ object BuildSketchUsingCluster {
       opt[Int]("sketch-size") action { (x, c) =>
         c.copy(sketchSize = x)
       } text ("Sketch size (default is 100000).")
+      opt[Unit]("assembly") action { (x, c) =>
+        c.copy(isAssembly = true)
+      } text ("Input files are genome assemblies.")
+      opt[Unit]("track-cov") action {(x,c) =>
+        c.copy(trackCov = true)
+      } text("Track coverage of kmers in sketch")
       opt[Int]("memory") action { (x, c) =>
         c.copy(maxMemory = x)
       } text ("Max memory for JVM in mb (default is 2000).")
@@ -73,7 +81,7 @@ object BuildSketchUsingCluster {
         "--sketch-size", config.sketchSize,
         "--name", name,
         "-o", (config.outputDir.getAbsolutePath + "/" + name)
-      ).mkString(" ")
+      ).mkString(" ") + (if(!config.isAssembly) "" else " --assembly") + (if(!config.trackCov) "" else " --track-cov")
     }
 
     //open target file

@@ -2,13 +2,13 @@ package compare
 
 import java.io.{File, PrintWriter}
 
-import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory, verifyFile}
-import utilities.SketchUtils.{RedwoodSketch, loadRedwoodSketch}
+import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory}
+import utilities.SketchUtils.loadVerifySketches
+import utilities.DistanceUtils._
+import utilities.NumericalUtils.choose
 import atk.ProgressBar.progress
-
-import scala.math.log
 import scala.annotation.tailrec
-import utilities.NumericalUtils.min
+import scala.collection.parallel.ForkJoinTaskSupport
 
 /**
   * Author: Alex N. Salazar
@@ -25,10 +25,11 @@ object SketchDistance {
                      outputDir: File = null,
                      prefix: String = null,
                      threads: Int = 1,
+                     log: Int = 1000
                    )
 
   def main(args: Array[String]) {
-    val parser = new scopt.OptionParser[Config]("sketch-converter") {
+    val parser = new scopt.OptionParser[Config]("distance") {
       opt[Seq[File]]('s', "sketch-files") valueName ("stetch1,sketch2,...") action { (x, c) =>
         c.copy(sketchFiles = x)
       } text ("Comma-separated sketch files to compare. Performs-pairwise mash distance for all provided sketches.")
@@ -44,64 +45,63 @@ object SketchDistance {
       } text ("Alternatively, provide a file with the paths of all sketches to compare, one per line.")
       opt[Int]('t', "threads") action { (x, c) =>
         c.copy(threads = x)
-      } text ("Max number of threads..")
+      } text ("Max number of threads.")
+      opt[Int]("log") hidden() action { (x, c) =>
+        c.copy(log = x)
+      } text ("Log process value.")
     }
     parser.parse(args, Config()).map { config =>
       //check whether output directory exists
       verifyDirectory(config.outputDir)
       //get list of sketches from input parameter
       println(timeStamp + "Loading sketches")
-      val all_sketches = {
+      val (all_sketches, kmer_length) = {
         if (config.sketchFiles == null && config.pathsFile == null) {
           assert(false, "Provide sketch files through '--sketch-files' or '--paths-file'")
-          List[RedwoodSketch]()
+          (Map[String, Set[Int]](), 0)
         }
-        else if (config.sketchFiles != null) {
-          config.sketchFiles.foreach(verifyFile(_))
-          config.sketchFiles.toList.map(loadRedwoodSketch(_))
-        }
-        else {
-          val sketches = openFileWithIterator(config.pathsFile).toList.map(new File(_))
-          sketches.foreach(verifyFile(_))
-          sketches.map(loadRedwoodSketch(_))
-        }
+        else if (config.sketchFiles != null) loadVerifySketches(config.sketchFiles.toList)
+        else loadVerifySketches(openFileWithIterator(config.pathsFile).toList.map(x => new File(x)))
       }
       assert(config.threads > 0, "Number of threads specified is a non-positive integer")
-      sketchDistance(all_sketches, config)
+      sketchDistance(all_sketches, kmer_length, config)
     }
   }
 
-  def sketchDistance(sketches: List[RedwoodSketch], config: Config): Unit = {
-    println(timeStamp + "Loaded " + sketches.size + " sketches")
-    //obtain sketch size to use
-    val (kmer_size, names) = {
-      //group by kmer size
-      val kmer_sizes = sketches.map(_.kmer_length).groupBy(identity)
-      //sanity check
-      assert(kmer_sizes.size == 1, "One more sketches have different kmer size:\n" + kmer_sizes.toList.mkString("\n"))
-      //group by name, get counts for each name
-      val all_names = sketches.map(_.name).groupBy(identity).mapValues(_.size)
-      //sanity check
-      assert(all_names.forall(_._2 == 1), "The following sketch names are not unique: " +
-        all_names.filter(_._2 > 1).map(_._1).mkString(","))
-      //get min sketch size
-      (kmer_sizes.head._1, all_names.keys.toList)
+  def sketchDistance(sketches: Map[String, Set[Int]], kmer_length: Int, config: Config): Unit = {
+    println(timeStamp + "Loaded " + sketches.size + " sketches with kmer-length of " + kmer_length)
+    //set id order
+    val ids = sketches.keys.toList
+    //obtain map of all distances above diagonal
+    val distance_map = {
+      println(timeStamp + "Generating pairwise interactions")
+      //get all pairwise interactions above diagonal
+      val pairwise = generatePairwise(ids, List()).par
+      //set max threads
+      pairwise.tasksupport = new ForkJoinTaskSupport(new scala.concurrent.forkjoin.ForkJoinPool(config.threads))
+      println(timeStamp + "Computing " + pairwise.size +  " mash distances")
+      //obtain mash distances in parallel
+      pairwise.map { case (s, t) => {
+        progress(config.log)
+        ((s, t), computeMashDist(sketches(s), sketches(t), kmer_length)
+        )}}.seq.toMap
     }
-    println(timeStamp + "Performing pairwise mash distances")
-    //create a map of all pairwise distances
-    val distance_map = pairwiseDist(kmer_size)(sketches, List()).toMap
+    /**
+      * Set curryied function to obtain distance of given two IDs
+      */
+    val getDist = fetchDistance(distance_map) _
     println(timeStamp + "Writing to disk")
     //create distance matrix
     val pw = new PrintWriter(config.outputDir + "/" + config.prefix + ".matrix")
     //output header
-    pw.println("$\t" + names.mkString("\t"))
+    pw.println("$\t" + ids.mkString("\t"))
     //iterate through each pairwise interaction in defined order and create rows
-    names.foreach(subj => {
+    ids.foreach(subj => {
       //output row name
       pw.print(subj)
-      names.foreach(target => {
+      ids.foreach(target => {
         //get mash distance
-        val md = if(subj == target) 0.0 else distance_map((subj, target))
+        val md = if (subj == target) 0.0 else getDist(subj, target)
         pw.print("\t" + md)
       })
       pw.println
@@ -112,60 +112,21 @@ object SketchDistance {
   }
 
   /**
-    * Tail-recursive method to compute all pairwise distances in a given list of sketch files
+    * Method to generate all pairwise interactions from a given list of IDs
     *
-    * @param remaining Remaining list of sketch files
-    * @param distances Accumulating pairwise distances as 3-tuples
-    * @return List of 3-tuples: (subj, target, jaccard distance)
+    * @param ids          List of IDs
+    * @param interactions (Accumulating) pairwise interactions
+    * @return List[(String,String)
     */
-  @tailrec def pairwiseDist(kmersize: Int)(remaining: List[RedwoodSketch],
-                            distances: List[((String, String), Double)]
-                           ): List[((String, String), Double)] = {
-    remaining match {
-      case Nil => distances
-      case (subj :: tail) => {
-        //iterate through remaining, and compute jaccard index
-        val updated_distances = tail.foldLeft(distances)((acc, target) => {
-          progress(1000)
-          //get pairwise interaction
-          val interaction = (subj.name, target.name)
-          //compute union
-          val union = broderUnion(subj.sketch.keySet, target.sketch.keySet)
-          //compute intersection
-          val intersect = union.intersect(subj.sketch.keySet).intersect(target.sketch.keySet).size.toDouble
-          //compute jaccard distance
-          val ji = (intersect / union.size)
-          //compute mash distance
-          val md = (-1.0/kmersize)*log((2*ji)/(1+ji))
-          //return 3-tuple with jaccard distance
-          (interaction.swap, md) :: ((interaction, md) :: acc)
-        })
-        pairwiseDist(kmersize)(tail, updated_distances)
-      }
+  @tailrec def generatePairwise(ids: List[String],
+                                interactions: List[(String, String)],
+                               ): List[(String, String)] = {
+    ids match {
+      //no more IDs to process
+      case Nil => interactions
+      //generate pairwise with current ID
+      case (subj :: tail) => generatePairwise(tail, tail.foldLeft(interactions)((acc, target) => (subj, target) :: acc))
     }
-  }
-
-  /**
-    * Method to obtain's Broder's union of two sets. In short, the smallest X hashes from the union of two sets.
-    * @param x
-    * @param y
-    * @return
-    */
-  def broderUnion(x: Set[Int], y: Set[Int]): Set[Int] = {
-    //get min sketch size to use
-    val min_sketch_size = {
-      //get size of each sketch
-      val (x_size, y_size) = (x.size, y.size)
-      //same sketch size
-      if(x_size == y_size) x_size
-      else {
-        println("--Warning: uneven sketch sizes " + (x_size, y_size) + ". Using sketch size of " + min(x_size, y_size))
-        //get min sketch size
-        min[Int](x_size, y_size)
-      }
-    }
-    //return Broder's union
-    x.union(y).toList.sorted.take(min_sketch_size).toSet
   }
 
 }

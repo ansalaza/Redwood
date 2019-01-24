@@ -9,6 +9,7 @@ import utilities.FileHandling.{writeSerialized, timeStamp, verifyDirectory, veri
 import utilities.SequenceUtils._
 import utilities.SequenceFormatUtils.loadSequenceFile
 import utilities.SketchUtils.RedwoodSketch
+import utilities.NumericalUtils.{mean,stdDev}
 
 import scala.collection.mutable
 import scala.util.hashing.MurmurHash3
@@ -37,7 +38,7 @@ object BuildSketch {
                      outputDir: File = null)
 
   def main(args: Array[String]) {
-    val parser = new scopt.OptionParser[Config]("build-sketch") {
+    val parser = new scopt.OptionParser[Config]("sketch") {
       opt[Seq[File]]('r', "read-files") valueName ("<file1>,<file2>,...") required() action { (x, c) =>
         c.copy(readFile = x)
       } text ("Read or assembly file(s) in FASTA, FASTQ, or FASTQ.GZ format.")
@@ -60,13 +61,12 @@ object BuildSketch {
       opt[Int]("sketch-size") action { (x, c) =>
         c.copy(sketchSize = x)
       } text ("Size of sketch (default is 100000).")
+      opt[Unit]("track-cov") action {(x,c) =>
+        c.copy(trackCov = true)
+      } text("Track coverage of kmers in sketch")
       opt[Int]("log") hidden() action { (x, c) =>
         c.copy(log = x)
       } text ("Count for progress logger.")
-      note("\nOPTIONAL: HASH WEIGHTS (CNV)\n")
-      opt[Unit]("track-cov") hidden() action { (x, c) =>
-        c.copy(trackCov = true)
-      } text ("Keep track of coverage of kmers that are inside the sketch.")
     }
     parser.parse(args, Config()).map { config =>
       //check whether output directory exists. If not, create it.
@@ -78,9 +78,9 @@ object BuildSketch {
 
   def buildSketch(config: Config): Unit = {
     println(timeStamp + "Building sketch of " + config.sketchSize + " kmers of size " + config.kmerSize + " for "
-      + config.sampleName + " using " + config.readFile.size + " read files")
+      + config.sampleName + " using " + config.readFile.size + " sequence files")
     //create sketch
-    var sketch = new mutable.PriorityQueue[Int]()
+    var sketch = new mutable.PriorityQueue[(Int, ByteEncoded)]()(Ordering.by(_._1))
     //set mutable sketch size
     var current_sketch_size = 0
 
@@ -90,7 +90,7 @@ object BuildSketch {
       *
       * @return Boolean
       */
-    def isLessThanMax: Int => Boolean = hash => (current_sketch_size < config.sketchSize) || (hash <= sketch.head)
+    def isLessThanMax: Int => Boolean = hash => (current_sketch_size < config.sketchSize) || (hash <= sketch.head._1)
 
     //hashmap for keeping track of frequency of hashes in sketch
     var inSketch = mutable.HashMap[Int, Int]()
@@ -169,9 +169,10 @@ object BuildSketch {
                   else {
                     //get in-sketch coverage, if it's in the sketch
                     val in_sketch_cov = inSketch.get(hash)
-                    //in sketch, update coverage
+                    //in sketch
                     if (in_sketch_cov.nonEmpty) {
-                      if (config.trackCov) inSketch.update(hash, in_sketch_cov.get + 1)
+                      //update coverage if specified
+                      if(config.trackCov) inSketch.update(hash, in_sketch_cov.get + 1)
                     }
                     //not in current sketch
                     else {
@@ -188,14 +189,14 @@ object BuildSketch {
                           //add to insketch
                           inSketch.update(hash, true_cov)
                           //add to sketch
-                          sketch.enqueue(hash)
+                          sketch.enqueue((hash, smallest))
                           //increment sketch size
                           current_sketch_size += 1
                         }
                         //sketch is full
                         else {
                           //remove current max from insketch
-                          inSketch.remove(sketch.head)
+                          inSketch.remove(sketch.head._1)
                           //remove current max from sketch
                           sketch.dequeue()
                           //remove new max from candidates
@@ -203,7 +204,7 @@ object BuildSketch {
                           //add new max to insketch
                           inSketch.update(hash, true_cov)
                           //add new max to sketch
-                          sketch.enqueue(hash)
+                          sketch.enqueue((hash,smallest))
                         }
                       }
                     }
@@ -222,23 +223,23 @@ object BuildSketch {
     println(timeStamp + "Completed sketch of size " + sketch.size)
     //get kmers in sketch
     val sketch_kmers = {
-      //load hashes from sketch and their coverage
-      val tmp = inSketch.toMap
-      //sanity check
-      assert(tmp.keySet == sketch.toSet)
-      if (!config.trackCov) tmp.mapValues(_ => 1.0).map(identity)
-      else {
-        println(timeStamp + "Estimating kmer copy number")
-        println(timeStamp + "--Removing kmers with 0.01 lowest/highest coverage")
-        val drop_size = (current_sketch_size * 0.01).toInt
-        val kmers_per_cov = tmp.values.toList.sorted //.drop(drop_size).dropRight(drop_size)
-          .groupBy(identity).mapValues(_.size).toList.sortBy(_._1)
-        val pw2 = new PrintWriter(config.outputDir + "/" + config.sampleName + ".cnvs.txt")
-        kmers_per_cov.foreach(x => pw2.println(x._1 + "\t" + x._2))
-        pw2.close
-        //normalize weights of original kmers
-        tmp.mapValues(_ => 1.0).map(identity)
+      //set sketch map
+      val sketch_map = {
+        //convert to map
+        val tmp = sketch.toMap
+        //sanity check
+        assert(tmp.keySet == inSketch.keySet)
+        //set coverage and kmer sequence
+        tmp.map(x => (x._1, ((if(!config.trackCov) 0 else inSketch(x._1)), x._2)))
       }
+      if(config.trackCov){
+        //get mean coverage
+        val mean_cov = mean(sketch_map.map(_._2._1))
+        //get standard deviation
+        val std_cov = stdDev(sketch_map.map(_._2._1))
+        println(timeStamp + "Mean kmer coverage of " + mean_cov + " with standard deviation of " + std_cov)
+      }
+      sketch_map.map(identity)
     }
     //clear out sketch, bloom filter, hash-tables
     bf.dispose()
