@@ -1,15 +1,16 @@
 package sketch
 
-import java.io.{File, PrintWriter}
+import java.io.File
 
 import atk.ProgressBar.progress
 import bloomfilter.CanGenerateHashFrom
 import bloomfilter.mutable.BloomFilter
-import utilities.FileHandling.{writeSerialized, timeStamp, verifyDirectory, verifyFile}
+import boopickle.Default._
+import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSerialized}
 import utilities.SequenceUtils._
 import utilities.SequenceFormatUtils.loadSequenceFile
 import utilities.SketchUtils.RedwoodSketch
-import utilities.NumericalUtils.{mean,stdDev}
+import utilities.NumericalUtils.{mean, stdDev}
 
 import scala.collection.mutable
 import scala.util.hashing.MurmurHash3
@@ -249,7 +250,10 @@ object BuildSketch {
     //create redwood sketch object
     println(timeStamp + "Writing to disk")
     val redwood_sketch = new RedwoodSketch(config.sampleName, config.kmerSize, sketch_kmers)
-    writeSerialized(redwood_sketch, new File(config.outputDir + "/" + config.sampleName + ".rdws"))
+    //serialize and write to disk
+    writeSerialized(
+      Pickle.intoBytes(redwood_sketch).array(),
+      new File(config.outputDir + "/" + config.sampleName + ".rdws"))
     println(timeStamp + "Successfully completed!")
   }
 

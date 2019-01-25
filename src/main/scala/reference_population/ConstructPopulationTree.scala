@@ -1,6 +1,8 @@
 package reference_population
 
 import java.io._
+
+import boopickle.Default._
 import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSerialized}
 import utilities.ClusteringUtils.{createDendogram, hierchicalClustering}
 
@@ -53,13 +55,11 @@ object ConstructPopulationTree {
       println(timeStamp + "Loading distance matrix")
       //load distance matrix
       val tmp = createDendogram(config.matrix, config.sketchesFile, config.verbose)
-      println(timeStamp + "--Loaded matrix with " + tmp.clusters.size + " samples and " + tmp.pairwise_leaf_dist.size +
-        " values")
+      println(timeStamp + "--Loaded matrix with " + tmp.clusters.size + " samples and " + tmp.matrix.size + " values")
       println(timeStamp + "Clustering samples and constructing kmer-tree")
-      hierchicalClustering(tmp, 0, tmp.sketch_map, config.verbose)
+      Pickle.intoBytes(hierchicalClustering(tmp, 0, config.verbose)).array()
     }
     println(timeStamp + "Writing to disk")
-    //serialize and write to disk
     writeSerialized(dendogram, new File(config.outputDir + "/" + config.prefix + ".rdwt"))
     println(timeStamp + "Successfully completed!")
 

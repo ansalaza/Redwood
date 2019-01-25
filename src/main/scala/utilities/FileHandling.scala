@@ -1,10 +1,12 @@
 package utilities
 
 import java.io._
+import java.nio.ByteBuffer
+import java.nio.file.{Files, Paths}
 import java.util.Calendar
 import java.util.zip.GZIPInputStream
 
-import utilities.SketchUtils.RedwoodSketch
+import boopickle.Default._
 
 import scala.io.Source
 
@@ -57,29 +59,30 @@ object FileHandling {
     assert(inputFile.exists() && inputFile.isFile(), message + ": " + inputFile.getAbsolutePath())
   }
 
-  def writeSerialized(serialized: Any, outputFile: File): Unit = {
+  def writeSerialized(serialized: Array[Byte], outputFile: File): Unit = {
     //create output file
     val pw = new BufferedOutputStream(new FileOutputStream(outputFile))
-    pw.write(serialize(serialized))
+    pw.write(serialized)
     pw.flush()
     pw.close
   }
-
-  def serialize: Any => Array[Byte] = some_object => {
+    /**
     val stream: ByteArrayOutputStream = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(stream)
     oos.writeObject(some_object)
     oos.reset()
     oos.close()
     stream.toByteArray
-  }
+      */
 
 
-  def deserialize: Array[Byte] => Any = some_byte_array => {
+  def deserialize: File => ByteBuffer = file => ByteBuffer.wrap(Files.readAllBytes(Paths.get(file.getAbsolutePath)))
+  /**
     val ois = new ObjectInputStream(new ByteArrayInputStream(some_byte_array))
     val value = ois.readObject
     ois.close()
     value
-  }
+    */
+
 
 }

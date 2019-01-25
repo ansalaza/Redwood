@@ -4,7 +4,7 @@ import java.io.{File, PrintWriter}
 
 import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory}
 import utilities.SketchUtils.{loadVerifySketches}
-import utilities.DistanceUtils.{computeMashDist, fetchDistance}
+import utilities.DistanceUtils.{computeMashDist, fetchDistance,loadMatrix}
 import atk.ProgressBar.progress
 import scala.annotation.tailrec
 import scala.collection.parallel.ForkJoinTaskSupport
@@ -121,32 +121,6 @@ object UpdateMatrix {
     })
     pw.close()
     println(timeStamp + "Successfully completed!")
-  }
-
-  /**
-    * Function to load a given matrix file into a map: (ID,ID) -> Distance. Returns 2-tuple: (map, total columns)
-    *
-    * @return Map[(String,String), Double}
-    */
-  def loadMatrix: File => (Map[(String, String), Double], Int) = _file => {
-    //load matrix
-    val matrix = openFileWithIterator(_file).toList
-    //create map of index -> ID
-    val index2ID = matrix.head.split("\t").drop(1).zipWithIndex.map(_.swap).toMap
-    //get total ids
-    val total_ids = index2ID.keySet.max + 1
-    //sanity check
-    assert(matrix.size - 1 == total_ids, "Number of rows is not equal to the number of columns")
-    //iterate through each line in the matrix and add distances
-    (matrix.drop(1).zipWithIndex.foldLeft(List[((String, String), Double)]()) { case (distances, (line, i)) => {
-      //get all values with index
-      val values = line.split("\t").drop(1).map(_.toDouble).zipWithIndex
-      //get row id
-      val row_id = index2ID(i)
-      //iterate through current row values and append distance
-      values.foldLeft(distances) { case (acc, (value, j)) => if (j <= i) acc else ((row_id, index2ID(j)), value) :: acc }
-    }
-    }.toMap, total_ids)
   }
 
   /**

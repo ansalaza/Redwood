@@ -1,8 +1,7 @@
 package utilities
 
 import java.io.File
-import java.nio.file.{Files, Paths}
-
+import boopickle.Default._
 import utilities.FileHandling._
 import utilities.SequenceUtils.ByteEncoded
 
@@ -29,10 +28,8 @@ object SketchUtils {
     *
     * @return RedwoodSketch
     */
-  def loadRedwoodSketch: File => RedwoodSketch = file => {
-    //deserialize as instance of RedwoodSketch
-    deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
-  }
+  def loadRedwoodSketch: File => RedwoodSketch = file => Unpickle[RedwoodSketch].fromBytes(deserialize(file))
+    //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
 
   /**
     * Load and verify sketches (existence, uniqueness, kmer-length compatability) for given list of files

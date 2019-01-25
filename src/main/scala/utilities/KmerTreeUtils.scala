@@ -1,7 +1,7 @@
 package utilities
 
 import java.io.File
-import java.nio.file.{Files, Paths}
+import boopickle.Default._
 
 import utilities.FileHandling.deserialize
 
@@ -252,9 +252,8 @@ object KmerTreeUtils {
   case class Node(id: Int, kmers: Kmers, sum_dist: Double, left: Tree[Kmers], right: Tree[Kmers]) extends Tree[Kmers]
 
 
-  def loadKmerTree: File => Node = file => {
+  def loadKmerTree: File => Node = file => Unpickle[Node].fromBytes(deserialize(file))
     //Unpickle[Node].fromBytes(ByteBuffer.wrap(Files.readAllBytes(Paths.get(file.getAbsolutePath))))
-    deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[Node]
-  }
+    //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[Node]
 
 }

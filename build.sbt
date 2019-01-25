@@ -10,5 +10,6 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.0.4" % "test",
   "com.github.scopt" % "scopt_2.12" % "3.7.0",
   "com.github.alexandrnikitin" %% "bloom-filter" % "latest.release",
+  "io.suzaku" %% "boopickle" % "1.3.0",
   "underscoreio" %% "doodle" % "0.8.2"
 )
