@@ -78,9 +78,9 @@ object UpdateMatrix {
   def updateMatrix(old: Map[String, Set[Int]], news: Map[String, Set[Int]], kmer_length: Int, config: Config): Unit = {
     println(timeStamp + "Loaded " + old.size + " existing sketches and " + news.size + " new sketches")
     //load matrix
-    val (existing_distances, total_samples) = loadMatrix(config.matrix)
+    val (existing_distances, all_ids) = loadMatrix(config.matrix)
     //sanity check
-    assert(total_samples == old.size, "Unexpected number of samples in matrix (" + total_samples + ") and samples in" +
+    assert(all_ids.size == old.size, "Unexpected number of samples in matrix (" + all_ids.size + ") and samples in" +
       " existing sketches (" + old.size + ")")
     println(timeStamp + "Loaded matrix with " + existing_distances.size + " distances (upper diagonal)")
     //update distance map

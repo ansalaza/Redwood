@@ -36,11 +36,17 @@ object TreeDrawingUtils {
                  text_offset: Int,
                  node2Coords: Map[String, (Double, Double)],
                  node2Proportions: Map[String, Double] = Map(),
-                 leaf2Colour: Map[String, Color] = Map()): Image = {
+                 node2Colour: Map[String, Color] = Map()): Image = {
 
-    def drawSubBranch(from: (Double, Double), to: (Double, Double), width: Double): Image = {
+    def drawSubBranch(from: (Double, Double),
+                      to: (Double, Double),
+                      width: Double,
+                      color: Color): Image = {
       if (width == 0.0) Image.empty
-      else openPath(List(moveTo(from._1, from._2), lineTo(to._1, to._2))).lineWidth(width)
+      else {
+        openPath(List(moveTo(from._1, from._2), lineTo(to._1, to._2)))
+          .lineWidth(width).fillColor(color).lineColor(color)
+      }
     }
 
     /**
@@ -64,8 +70,11 @@ object TreeDrawingUtils {
           else {
             //get x,y coordinates
             val (x, y) = node2Coords(i.toString)
+            //get color
+            val node_colour = node2Colour.getOrElse(i.toString, default_color)
             //updated with node
-            val updated_with_node = (text(i.toString).font(font)).at(x + text_offset, y).on(updated_image)
+            val updated_with_node =
+              (text(i.toString).font(font)).fillColor(node_colour).at(x + text_offset, y).on(updated_image)
             //get left and right line-widths
             val (left_width, right_width) = (node2Proportions(l.getID()), node2Proportions(r.getID()))
             //both sub-branches are empty, move on
@@ -74,17 +83,20 @@ object TreeDrawingUtils {
             else {
               //get left and right sub-tree x and y-coord
               val ((left_x, left_y), (right_x, right_y)) = (node2Coords(l.getID()), node2Coords(r.getID()))
-              //draw left-branch
-              val left_branch = {
-                //draw horizontal
-                drawSubBranch((x, right_y), (right_x, right_y), right_width).on(
-                  //draw vertical
-                  drawSubBranch((x, y), (x, right_y), right_width))
-              }
+              //get left and right colours
+              val (left_colour, right_colour) =
+                (node2Colour.getOrElse(l.getID(), default_color), node2Colour.getOrElse(r.getID(), default_color))
               //draw right-branch
               val right_branch = {
-                drawSubBranch((x, left_y), (left_x, left_y), left_width).on(
-                  drawSubBranch((x, y), (x, left_y), left_width))
+                //draw horizontal
+                drawSubBranch((x, right_y), (right_x, right_y), right_width, right_colour).on(
+                  //draw vertical
+                  drawSubBranch((x, y), (x, right_y), right_width, right_colour))
+              }
+              //draw left-branch
+              val left_branch = {
+                drawSubBranch((x, left_y), (left_x, left_y), left_width, left_colour).on(
+                  drawSubBranch((x, y), (x, left_y), left_width, left_colour))
               }
               //update image
               left_branch.on(right_branch).on(updated_with_node)
@@ -108,7 +120,7 @@ object TreeDrawingUtils {
           //get x, y coordinates
           val y_coord = node2Coords(leaf)._2
           //get colour
-          val colour = leaf2Colour.getOrElse(leaf, default_color)
+          val colour = node2Colour.getOrElse(leaf, default_color)
           //draw leaf on y coord
           (if (leaf_prop == 0.0) Image.empty else (text(leaf).font(font).fillColor(colour))).at(0, y_coord).on(acc)
         })
@@ -124,7 +136,7 @@ object TreeDrawingUtils {
     */
   def getCoords(tree: Tree[Kmers],
                 canvas: (Int, Int),
-                normalize: (String,Double) => Double
+                normalize: (String, Double) => Double
                ): Map[String, (Double, Double)] = {
     //get total number of leafs
     val total_leafs = tree.getLeafNames().size

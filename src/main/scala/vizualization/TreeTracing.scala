@@ -16,6 +16,7 @@ import utilities.TreeDrawingUtils._
 import doodle.syntax._
 import doodle.jvm.Java2DFrame._
 import doodle.backend.StandardInterpreter._
+import doodle.core.Color
 import doodle.jvm.FileFrame.pdfSave
 import doodle.core.font.Font
 import doodle.core.font.FontFace.Bold
@@ -125,7 +126,7 @@ object TreeTracing {
 
     //get colours, if provided
     val id2Colour = {
-      //attempt to laod colours file
+      //attempt to load colours file
       val tmp = loadColoursFile(config.coloursFile)
       //log
       if(config.coloursFile != null) {
@@ -136,7 +137,12 @@ object TreeTracing {
         assert(missing_leafs.isEmpty, "Could not find colour mapping for the following IDs: " + missing_leafs
           .mkString(","))
       }
-      tmp
+      //add node colour by determining whether a given node contains leafs of all the same color
+      tree.id2Leafnames().foldLeft(List[(String, Color)]())((acc, node) => {
+        //get all colours in current node
+        val color_set = node._2.map(x => tmp(x)).toSet
+        if(color_set.size > 1) acc else (node._1, color_set.head) :: acc
+      }).toMap
     }
     //get proportions, if provided
     val node2Proportions = {
