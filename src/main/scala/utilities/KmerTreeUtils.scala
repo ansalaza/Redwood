@@ -169,9 +169,9 @@ object KmerTreeUtils {
             //both contain
             if (l_contains && r_contains) acc
             //left contains kmer
-            else if (l_contains && !r_contains) _queryLCA(l, i.toString)
+            else if (l_contains && !r_contains) _queryLCA(l, l.getID())
             //right contains kmer
-            else if (!l_contains && r_contains) _queryLCA(r, i.toString)
+            else if (!l_contains && r_contains) _queryLCA(r, r.getID())
             //neither contain kmer
             else acc
           }

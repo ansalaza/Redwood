@@ -21,6 +21,7 @@ object BuildSketchUsingCluster {
                      kmerSize: Int = 21,
                      maxMemory: Int = 20000,
                      sketchSize: Int = 100000,
+                     minCov: Int = 2,
                      isAssembly: Boolean = false,
                      trackCov: Boolean = false,
                      clusterConfig: File = null)
@@ -41,6 +42,9 @@ object BuildSketchUsingCluster {
       opt[Int]("kmer-size") action { (x, c) =>
         c.copy(kmerSize = x)
       } text ("Kmer size (default is 21).")
+      opt[Int]("min-cov") action { (x, c) =>
+        c.copy(minCov = x)
+      } text ("Minimum coverage of kmer before adding to sketch (default is 2).")
       opt[Int]("sketch-size") action { (x, c) =>
         c.copy(sketchSize = x)
       } text ("Sketch size (default is 100000).")
@@ -64,11 +68,11 @@ object BuildSketchUsingCluster {
       verifyDirectory(config.outputDir)
       verifyFile(config.libraries)
       verifyFile(config.redwoodBinary)
-      constructMashSketches(config)
+      constructSketches(config)
     }
   }
 
-  def constructMashSketches(config: Config): Unit = {
+  def constructSketches(config: Config): Unit = {
     /**
       * Function to create redwood sketch command given a sequence of read files and the sample name
       * assuming given samples are one or more FASTQ.GZ files
@@ -76,9 +80,10 @@ object BuildSketchUsingCluster {
       */
     def makeRedwoodSketchCommand: (Seq[File],String) => String = (files,name) => {
       Seq("java", "-Xmx" + config.maxMemory + "m", "-jar", config.redwoodBinary.getAbsolutePath, "sketch",
-        "--read-files", files.map(_.getAbsolutePath).mkString(","),
+        "--seq-files", files.map(_.getAbsolutePath).mkString(","),
         "--kmer-size", config.kmerSize,
         "--sketch-size", config.sketchSize,
+        "--min-cov", config.minCov,
         "--name", name,
         "-o", (config.outputDir.getAbsolutePath + "/" + name)
       ).mkString(" ") + (if(!config.isAssembly) "" else " --assembly") + (if(!config.trackCov) "" else " --track-cov")

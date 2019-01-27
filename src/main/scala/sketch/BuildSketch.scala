@@ -29,18 +29,18 @@ object BuildSketch {
 
   case class Config(
                      readFile: Seq[File] = null,
-                     kmerSize: Int = 21,
                      sampleName: String = null,
+                     outputDir: File = null,
+                     kmerSize: Int = 21,
+                     minCov: Int = 2,
                      sketchSize: Int = 100000,
-                     log: Int = 1000000,
                      trackCov: Boolean = false,
                      isAssembly: Boolean = false,
-                     minCov: Int = 2,
-                     outputDir: File = null)
+                     log: Int = 1000000)
 
   def main(args: Array[String]) {
     val parser = new scopt.OptionParser[Config]("sketch") {
-      opt[Seq[File]]('r', "read-files") valueName ("<file1>,<file2>,...") required() action { (x, c) =>
+      opt[Seq[File]]('s', "seq-files") valueName ("<file1>,<file2>,...") required() action { (x, c) =>
         c.copy(readFile = x)
       } text ("Read or assembly file(s) in FASTA, FASTQ, or FASTQ.GZ format.")
       opt[String]("name") required() action { (x, c) =>

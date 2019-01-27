@@ -129,20 +129,21 @@ object TreeTracing {
       //attempt to load colours file
       val tmp = loadColoursFile(config.coloursFile)
       //log
-      if(config.coloursFile != null) {
+      if(config.coloursFile == null) tmp
+      else {
         println(timeStamp + "Found colours for " + tmp.size + " leafs")
         //get missing leafs, if any
         val missing_leafs = all_leafs.toSet.diff(tmp.keySet)
         //sanity check
         assert(missing_leafs.isEmpty, "Could not find colour mapping for the following IDs: " + missing_leafs
           .mkString(","))
+        //add node colour by determining whether a given node contains leafs of all the same color
+        tree.id2Leafnames().foldLeft(List[(String, Color)]())((acc, node) => {
+          //get all colours in current node
+          val color_set = node._2.map(x => tmp(x)).toSet
+          if(color_set.size > 1) acc else (node._1, color_set.head) :: acc
+        }).toMap
       }
-      //add node colour by determining whether a given node contains leafs of all the same color
-      tree.id2Leafnames().foldLeft(List[(String, Color)]())((acc, node) => {
-        //get all colours in current node
-        val color_set = node._2.map(x => tmp(x)).toSet
-        if(color_set.size > 1) acc else (node._1, color_set.head) :: acc
-      }).toMap
     }
     //get proportions, if provided
     val node2Proportions = {
