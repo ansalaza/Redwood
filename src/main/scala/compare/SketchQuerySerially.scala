@@ -4,8 +4,7 @@ import java.io.File
 
 import utilities.FileHandling.{verifyDirectory, verifyFile, timeStamp, openFileWithIterator}
 import utilities.SketchUtils.loadRedwoodSketch
-import utilities.KmerTreeUtils.loadKmerTree
-
+import utilities.ReducedKmerTreeUtils.loadReducedKmerTree
 /**
   * Author: Alex N. Salazar
   * Created on 27-1-2019
@@ -58,8 +57,8 @@ object SketchQuerySerially {
     })
     println(timeStamp + "Found " + sketches.size + " sketches to query")
     println(timeStamp + "Pre-loading tree")
-    val ktree = loadKmerTree(config.kmerTree)
-    println(timeStamp + "--" + ktree.getLeafNames().size + " leafs and " + ktree.getKmerSetSizes().size + " clusters ")
+    val ktree = loadReducedKmerTree(config.kmerTree)
+    println(timeStamp + "--" + ktree.tree.getLeafId2Name().size + " leafs and " +  " " + "clusters ")
     //iterate through each sketch and query
     sketches.foreach(sketch => {
       //get sketch name

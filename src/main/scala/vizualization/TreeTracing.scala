@@ -8,10 +8,11 @@ package vizualization
   * Description:
   */
 
+
 import java.io.File
 
 import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile}
-import utilities.KmerTreeUtils._
+import utilities.ReducedKmerTreeUtils.loadReducedKmerTree
 import utilities.TreeDrawingUtils._
 import doodle.syntax._
 import doodle.jvm.Java2DFrame._
@@ -90,13 +91,13 @@ object TreeTracing {
   def drawTree(config: Config): Unit = {
     println(timeStamp + "Loading tree")
     //load tree
-    val tree = loadKmerTree(config.tree)
+    val tree = loadReducedKmerTree(config.tree).tree
     //get all leafs
-    val all_leafs = tree.getLeafNames()
+    val leafname2id = tree.getLeafId2Name().map(_.swap)
     //get total nodes
-    val all_nodes = tree.id2Leafnames().map(_._1)
+    val all_nodes = tree.getNodeIDsPostOrder()
     //set node levels
-    val node2levels = if(!config.equalDist) Map.empty[String,Int] else tree.node2Levels().toMap
+    val node2levels = if(!config.equalDist) Map.empty[Int,Int] else tree.getId2Levels()
     //set max node level
     val dist_step = {
       if(!config.equalDist) 0
@@ -117,9 +118,9 @@ object TreeTracing {
       *
       * @return
       */
-    def normalize_dist: (String,Double) => Double = (id,value) => {
+    def normalize_dist: (Int,Double) => Double = (id,value) => {
       //use original branch distances
-      if(!config.equalDist) config.canvasWidth - ((value / tree.sum_dist) * config.canvasWidth)
+      if(!config.equalDist) config.canvasWidth - ((value / tree.loadAsNode().sum_dist) * config.canvasWidth)
       //use equal distant branches
       else dist_step * node2levels(id)
     }
@@ -129,38 +130,39 @@ object TreeTracing {
       //attempt to load colours file
       val tmp = loadColoursFile(config.coloursFile)
       //log
-      if(config.coloursFile == null) tmp
+      if(config.coloursFile == null) Map.empty[Int, Color]
       else {
         println(timeStamp + "Found colours for " + tmp.size + " leafs")
         //get missing leafs, if any
-        val missing_leafs = all_leafs.toSet.diff(tmp.keySet)
+        val missing_leafs = leafname2id.keySet.diff(tmp.keySet)
         //sanity check
         assert(missing_leafs.isEmpty, "Could not find colour mapping for the following IDs: " + missing_leafs
           .mkString(","))
         //add node colour by determining whether a given node contains leafs of all the same color
-        tree.id2Leafnames().foldLeft(List[(String, Color)]())((acc, node) => {
+        tree.getId2LeafNames().foldLeft(List[(Int, Color)]()){case (acc, (id, leafs)) => {
           //get all colours in current node
-          val color_set = node._2.map(x => tmp(x)).toSet
-          if(color_set.size > 1) acc else (node._1, color_set.head) :: acc
-        }).toMap
+          val color_set = leafs.map(tmp(_)).toSet
+          if(color_set.size > 1) acc else (id, color_set.head) :: acc
+        }}.toMap
       }
     }
     //get proportions, if provided
     val node2Proportions = {
-      if(config.proportions == null) all_nodes.map(x => (x, config.lineWidth.toDouble)).toMap
+      if(config.proportions == null)
+        (all_nodes ::: leafname2id.values.toList).map(x => (x, config.lineWidth.toDouble)).toMap
       else {
         //set min line width
         val min_width = config.minFreq * config.lineWidth
         println(timeStamp + "Setting min frequency to " + config.minFreq + " (" + min_width + ")")
         //load proportions from query file and ignore given min frequency
-        val tmp = loadProportionsFile(config.proportions, config.lineWidth, tree)
+        val tmp = loadQueryFile(config.proportions, config.lineWidth, tree)
           .map(x => if(x._2 >= min_width) x else (x._1, 0.0))
         println(timeStamp + "Loaded branch proportions for " + tmp.size + " nodes/leafs")
         tmp
       }
     }
-    println(timeStamp + "Found tree with " + all_nodes.size + " nodes (" + all_leafs.size +
-      " leafs) and a total distance of " + tree.sum_dist)
+    println(timeStamp + "Found tree with " + all_nodes.size + " nodes (" + leafname2id.size + " leafs) and a total " +
+      "distance of " + tree.loadAsNode().sum_dist)
     println(timeStamp + "Computing coordinates")
     //obtain x,y coordinates for every x,y coordinate
     val node2Coords = getCoords(tree, (config.canvasWidth, config.canvasHeight), normalize_dist)

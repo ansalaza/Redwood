@@ -3,13 +3,13 @@ package utilities
 import java.io.File
 
 import doodle.core.{Color, Image}
-import doodle.core.Image.{openPath, text, rectangle}
+import doodle.core.Image.{openPath, text}
 import doodle.core.Color.hsl
 import doodle.syntax._
 import doodle.core.PathElement.{lineTo, moveTo}
 import doodle.core.font.Font
 import utilities.FileHandling.openFileWithIterator
-import utilities.KmerTreeUtils.{Kmers, Leaf, Node, Tree}
+import utilities.ReducedKmerTreeUtils._
 
 /**
   * Author: Alex N. Salazar
@@ -18,6 +18,7 @@ import utilities.KmerTreeUtils.{Kmers, Leaf, Node, Tree}
   *
   * Description:
   */
+
 object TreeDrawingUtils {
 
   //set default color of black
@@ -31,12 +32,12 @@ object TreeDrawingUtils {
     * @param node2Coords
     * @return Image
     */
-  def treeDrawer(tree: Tree[Kmers],
+  def treeDrawer(tree: ReducedTree,
                  font: Font,
                  text_offset: Int,
-                 node2Coords: Map[String, (Double, Double)],
-                 node2Proportions: Map[String, Double] = Map(),
-                 node2Colour: Map[String, Color] = Map()): Image = {
+                 node2Coords: Map[Int, (Double, Double)],
+                 node2Proportions: Map[Int, Double] = Map(),
+                 node2Colour: Map[Int, Color] = Map()): Image = {
 
     def drawSubBranch(from: (Double, Double),
                       to: (Double, Double),
@@ -56,22 +57,22 @@ object TreeDrawingUtils {
       * @param acc
       * @return Image
       */
-    def _treeDrawer(current: Tree[Kmers], acc: Image): Image = {
+    def _treeDrawer(current: ReducedTree, acc: Image): Image = {
       current match {
-        case Leaf(a, b) => acc
-        case Node(i, k, d, l, r) => {
+        case ReducedLeaf(a,b) => acc
+        case ReducedNode(i, d, l, r) => {
           //update left right subtree
           val updated_image = _treeDrawer(l, acc).on(_treeDrawer(r, acc))
           //get current nodes prop
-          val node_prop = node2Proportions(i.toString)
+          val node_prop = node2Proportions(i)
           //current node is empty, move on
           if (node_prop == 0.0) updated_image
           //current node is not empty
           else {
             //get x,y coordinates
-            val (x, y) = node2Coords(i.toString)
+            val (x, y) = node2Coords(i)
             //get color
-            val node_colour = node2Colour.getOrElse(i.toString, default_color)
+            val node_colour = node2Colour.getOrElse(i, default_color)
             //updated with node
             val updated_with_node =
               (text(i.toString).font(font)).fillColor(node_colour).at(x + text_offset, y).on(updated_image)
@@ -115,15 +116,15 @@ object TreeDrawingUtils {
     rooted.beside(
       _treeDrawer(tree, Image.empty).beside(
         //iterate through leafs and draw sample names
-        tree.getLeafNames().reverse.foldLeft(Image.empty)((acc, leaf) => {
-          val leaf_prop = node2Proportions(leaf)
+        tree.getLeafId2Name().foldLeft(Image.empty){case(acc, (id,name)) => {
+          val leaf_prop = node2Proportions(id)
           //get x, y coordinates
-          val y_coord = node2Coords(leaf)._2
+          val y_coord = node2Coords(id)._2
           //get colour
-          val colour = node2Colour.getOrElse(leaf, default_color)
+          val colour = node2Colour.getOrElse(id, default_color)
           //draw leaf on y coord
-          (if (leaf_prop == 0.0) Image.empty else (text(leaf).font(font).fillColor(colour))).at(0, y_coord).on(acc)
-        })
+          (if (leaf_prop == 0.0) Image.empty else (text(name).font(font).fillColor(colour))).at(0, y_coord).on(acc)
+        }}
       )
     )
   }
@@ -134,16 +135,16 @@ object TreeDrawingUtils {
     * @param tree
     * @return Map[String, (Double,Double)]
     */
-  def getCoords(tree: Tree[Kmers],
+  def getCoords(tree: ReducedTree,
                 canvas: (Int, Int),
-                normalize: (String, Double) => Double
-               ): Map[String, (Double, Double)] = {
+                normalize: (Int, Double) => Double
+               ): Map[Int, (Double, Double)] = {
     //get total number of leafs
-    val total_leafs = tree.getLeafNames().size
+    val total_leafs = tree.getLeafId2Name().size
     //get the vertical y-coordinate step based on total leafs
     val ycoord_step = canvas._2.toDouble / total_leafs
     //get all leafs and their corresponding y-coord
-    val leaf2ycoord = tree.getLeafNames().zipWithIndex.map(x => (x._1, x._2 * ycoord_step)).toMap
+    val leaf2ycoord = tree.getLeafNamesPostOrder().zipWithIndex.map(x => (x._1, x._2 * ycoord_step)).toMap
 
     /**
       * Recursive method to traverse tree and obtain x and y-coordinates for nodes and leafs
@@ -152,20 +153,20 @@ object TreeDrawingUtils {
       * @param acc
       * @return
       */
-    def _getCoords(current: Tree[Kmers],
-                   acc: Map[String, (Double, Double)]): Map[String, (Double, Double)] = {
+    def _getCoords(current: ReducedTree,
+                   acc: Map[Int, (Double, Double)]): Map[Int, (Double, Double)] = {
       //check current (sub)tree
       current match {
         //leaf, add x,y coord
-        case Leaf(a, b) => acc + (b -> (canvas._1, leaf2ycoord(b)))
+        case ReducedLeaf(a,b) => acc + (a -> (canvas._1, leaf2ycoord(b)))
         //node
-        case Node(i, k, d, l, r) => {
+        case ReducedNode(i, d, l, r) => {
           //Update left and right sub-trees
           val updated_acc = _getCoords(l, acc) ++ _getCoords(r, acc)
           //set y-coord as average of left and right
           val y_coord = (updated_acc(l.getID())._2 + updated_acc(r.getID())._2) / 2
           //add x, y coord
-          updated_acc + (i.toString -> (normalize(i.toString, d), y_coord))
+          updated_acc + (i -> (normalize(i, d), y_coord))
         }
       }
     }
@@ -191,10 +192,10 @@ object TreeDrawingUtils {
     }).toMap
   }
 
-  def loadProportionsFile(file: File, max_width: Int, tree: Tree[Kmers]): Map[String, Double] = {
-    openFileWithIterator(file).drop(1).toList.foldLeft(Map[String, Double]())((acc, line) => {
+  def loadQueryFile(file: File, max_width: Int, tree: ReducedTree): Map[Int, Double] = {
+    openFileWithIterator(file).drop(1).toList.foldLeft(Map[Int, Double]())((acc, line) => {
       val columns = line.split("\t")
-      acc + (columns.head -> (columns(1).toDouble * max_width))
+      acc + (columns.head.toInt -> (columns(2).toDouble * max_width))
     })
   }
 

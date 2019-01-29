@@ -3,7 +3,7 @@ package reference_population
 import java.io.{File, PrintWriter}
 
 import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile}
-import utilities.KmerTreeUtils.loadKmerTree
+import utilities.ReducedKmerTreeUtils.loadReducedKmerTree
 
 /**
   * Author: Alex N. Salazar
@@ -41,21 +41,28 @@ object TreeMetrics {
   def treeMetrics(config: Config): Unit = {
     //load kmer tree
     println(timeStamp + "Loading kmer-tree")
-    val ktree = loadKmerTree(config.kmerTree)
+    val ktree = loadReducedKmerTree(config.kmerTree)
+    //get leaf id -> name
+    val leafsid2name = ktree.tree.getLeafId2Name()
+    //get node -> leaf names
+    val node2leafs = ktree.tree.getId2LeafNames().mapValues(_.size)
+    //get all nodes
+    val nodes = ktree.tree.getNodeIDsPostOrder().size
     //get all leafs
-    val leafs = ktree.getLeafNames()
-    //get all kmer set sizes
-    val set_sizes = ktree.getKmerSetSizes()
-    println(timeStamp + "Found " + leafs.size + " leafs with " + set_sizes.size + " clusters")
+    val leafs = ktree.tree.getLeafNamesPostOrder().size
+    //get node -> kmers
+    val node2kmers = ktree.node2totalkmers
+    println(timeStamp + "Found " + leafs + " leafs with " + nodes + " nodes")
     println(timeStamp + "Writing to disk")
     //create output file
     val pw = new PrintWriter(config.outputDir + "/" + config.prefix + ".txt")
     //output header
-    pw.println("Kmers\tLeafs\tIdentifier")
-    //id to leafs
-    val node2leafs = ktree.id2Leafnames().toMap.mapValues(_.size)
+    pw.println("ID\tName\tLeafs\tKmers")
     //output metrics
-    set_sizes.foreach(cluster => pw.println(cluster._2 + "\t" + node2leafs(cluster._1) + "\t" + cluster._1))
+    node2kmers.foreach(node => {
+      val name = leafsid2name.get(node._1)
+      pw.println(node._1 + "\t" + (if(name.isEmpty) "" else name.get) + "\t" + node2leafs(node._1) + "\t" + node._2)
+    })
     pw.close
     println(timeStamp + "Successfully completed!")
   }

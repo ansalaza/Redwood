@@ -1,9 +1,8 @@
 package utilities
 
 import java.io.File
-import boopickle.Default._
 
-import utilities.FileHandling.deserialize
+import utilities.ReducedKmerTreeUtils._
 
 /**
   * Author: Alex N. Salazar
@@ -12,6 +11,7 @@ import utilities.FileHandling.deserialize
   *
   * Description:
   */
+
 object KmerTreeUtils {
 
   type Kmers = Set[Int]
@@ -23,163 +23,84 @@ object KmerTreeUtils {
   sealed trait Tree[+Kmers] {
 
     /**
-      * Method to obtain the tree level (depth) of all nodes/leafs
+      * Method to compute the in-order traversal for a given tree
       * @param tree
       * @tparam Kmers
-      * @return List[(String,Int)]
+      * @return List of IDs
       */
-    def node2Levels[Kmers](tree: Tree[Kmers] = this): List[(String, Int)] = {
-      def _node2Levels[Kmers](current: Tree[Kmers], level: Int, acc: List[(String,Int)]): List[(String,Int)] = {
+    def inOrderTraversal[Kmers](tree: Tree[Kmers] = this): List[String] = {
+      def _inOrderTraversal[Kmers](current: Tree[Kmers], acc: List[String]): List[String] = {
         current match {
-          case Leaf(a,b) => (b,level) :: acc
-          case Node(i,a,d,l,r) =>
-            (i.toString, level) :: (_node2Levels(l, level+1, acc) ::: _node2Levels(r, level+1, acc))
-        }
-      }
-      _node2Levels(tree, 0, List())
-    }
-
-    /**
-      * Method to obtain leaf-names in post-order traversal of a given tree
-      *
-      * @param tree Tree of type Kmers
-      * @return post-order traversal as a list of each node's name
-      */
-    def getLeafNames[Kmers](tree: Tree[Kmers] = this): List[String] = {
-      /**
-        * Recursive method to iterate through tree in post-order traversal
-        *
-        * @param current Current Tree
-        * @param acc     Accumulating list of post-traversal
-        * @return List of (reversed) post-order traversal
-        */
-      def _getLeafNames[Kmers](current: Tree[Kmers], acc: List[String]): List[String] = {
-        current match {
-          //append value to list
           case Leaf(a, b) => b :: acc
-          //traverse to left then right
-          case Node(i, a, d, l, r) => (_getLeafNames(r, acc) ::: _getLeafNames(l, acc))
-        }
-      }
-
-      _getLeafNames(tree, List()).reverse
-    }
-
-    /**
-      * Method to obtain all leaf names under each node
-      *
-      * @param tree
-      * @tparam Kmers
-      * @return List of 2-tuples: (node/leaf ID, leaf names in lexicographic order)
-      */
-    def id2Leafnames[Kmers](tree: Tree[Kmers] = this): List[(String, List[String])] = {
-      /**
-        * Recursive method to iterate through tree in post-order traversal
-        *
-        * @param current Current Tree
-        * @param acc     Accumulating list of post-traversal
-        * @return List of (reversed) post-order traversal
-        */
-      def _id2Leafnames[Kmers](current: Tree[Kmers],
-                               acc: List[(String, List[String])]): List[(String, List[String])] = {
-        current match {
-          //append value to list
-          case Leaf(a, b) => (b, List(b)) :: acc
-          //traverse to left then right
-          case Node(i, a, d, l, r) =>
-            (i.toString(), getLeafNames(current).sorted) :: (_id2Leafnames(r, acc) ::: _id2Leafnames(l, acc))
-        }
-      }
-
-      _id2Leafnames(tree, List()).reverse
-    }
-
-    /**
-      * Method to traverse to perform post-order traversal and get kmer-set size for each node/leaf
-      *
-      * @param tree Tree
-      * @tparam Kmers
-      * @return List of 2-tuples: (ID, Kmer-set size)
-      */
-    def getKmerSetSizes[Kmers](tree: Tree[Kmers] = this): List[(String, Int)] = {
-      /**
-        * Recursive method to iterate through tree in post-order traversal
-        *
-        * @param current Current Tree
-        * @param acc     Accumulating list of post-traversal
-        * @return List of (reversed) post-order traversal
-        */
-      def _getKmerSetSizes[Kmers](current: Tree[Kmers], acc: List[(String, Int)]): List[(String, Int)] = {
-        current match {
-          //append value to list
-          case Leaf(a, b) => (b, a.size) :: acc
-          //traverse to left then right
-          case Node(i, a, d, l, r) => (i.toString, a.size) :: (_getKmerSetSizes(r, acc) ::: _getKmerSetSizes(l, acc))
-        }
-      }
-
-      _getKmerSetSizes(tree, List()).reverse
-    }
-
-    /**
-      * Method to obtain the total distance of a given (sub)tree
-      *
-      * @param tree
-      * @tparam Kmers
-      * @return Double
-      */
-    def totalDistance[Kmers](tree: Tree[Kmers] = this): Double = {
-      def _totalDistance[Kmers](current: Tree[Kmers], acc: List[Double]): List[Double] = {
-        current match {
-          //append distance to list
-          case Leaf(a, b) => acc
-          case Node(i, a, d, l, r) => d :: (_totalDistance(l, acc) ::: _totalDistance(r, acc))
-        }
-      }
-      _totalDistance(tree, List()).sum
-    }
-
-    /**
-      * Method to obtain the lowest-common ancestor of a given kmer based on set-membership of left/right sub-trees
-      *
-      * @param kmer Kmer hash
-      * @param tree Tree
-      * @tparam Kmers
-      * @return Node/leaf ID of the lowest common ancestor as Option[String]
-      */
-    def queryLCA[Kmers](kmer: Int, tree: Tree[Kmers] = this): Option[String] = {
-      /**
-        * Recursive method to traverse tree based on set-membership of left/right subtrees
-        *
-        * @param current Current node/leaf in tree
-        * @param acc     current lowest common ancestor
-        * @tparam Kmers
-        * @return Node/leaf ID of lowest common ancestor
-        */
-      def _queryLCA[Kmers](current: Tree[Kmers], acc: String): String = {
-        current match {
-          //append value to list
-          case Leaf(a, b) => if (!a.contains(kmer)) acc else b
-          //traverse to left then right
           case Node(i, a, d, l, r) => {
-            //sanity check
-            assert(a(kmer))
-            //check membership in left and right subtree
-            val (l_contains, r_contains) = (l.loadKmers().contains(kmer), r.loadKmers().contains(kmer))
-            //both contain
-            if (l_contains && r_contains) acc
-            //left contains kmer
-            else if (l_contains && !r_contains) _queryLCA(l, l.getID())
-            //right contains kmer
-            else if (!l_contains && r_contains) _queryLCA(r, r.getID())
-            //neither contain kmer
-            else acc
+            val left = (_inOrderTraversal(l, acc))
+            val right = (_inOrderTraversal(r, acc))
+            right ::: ((i.toString) :: left)
           }
         }
       }
-      //check whether root contains kmer
-      if (!tree.loadKmers().contains(kmer)) None else Option(_queryLCA(tree, tree.loadAsNode().id.toString))
+
+      _inOrderTraversal(tree, List()).reverse
     }
+
+    /**
+      * Method to create a ReducedTree along with the LCA-kmer map
+      * @param tree
+      * @param old2new
+      * @tparam Kmers
+      * @return 2-tuple: (ReducedTree, LCA-kmer map)
+      */
+    def copy2ReducedKmerTree[Kmers](tree: Tree[Kmers] = this,
+                                    old2new: Map[String, Int]
+                                   ): (ReducedTree, Map[Int, Int]) = {
+
+      def _copy2ReducedKmerTree[Kmers](current: Tree[Kmers],
+                                       acc_tree: ReducedTree,
+                                       acc_map: Map[Int, List[Int]]
+                                      ): (ReducedTree, Map[Int, List[Int]]) = {
+
+        /**
+          * Function to add kmers to a kmer map given a kmer-map, kmers, and an ID
+          * @return Map[Int,Lis[Int]
+          */
+        def addKmers:(Map[Int,List[Int]], Set[Int], Int) => Map[Int, List[Int]] = (map, kmers, id) => {
+          kmers.foldLeft(map)((acc,kmer) => {
+            val updated = id :: acc.getOrElse(kmer, List[Int]())
+            acc + (kmer -> updated)
+          })
+        }
+        current match {
+          //node is a leaf
+          case Leaf(a,b) => {
+            //leaf id
+            val id = old2new(b)
+            //set reduced leaf node
+            val leaf_node: ReducedTree = ReducedLeaf(id, b)
+            //update kmer map with current leaf kmers
+            (leaf_node, addKmers(acc_map, a, id))
+          }
+          //node is a node
+          case Node(i, a, d, l, r) => {
+            //get node id
+            val id = old2new(i.toString)
+            //set left and right subtree with updated map
+            val (left, right, updated_map) = {
+              //first set left subtree
+              val tmp_l = _copy2ReducedKmerTree(l, acc_tree, acc_map)
+              //then set right subtree using updated map from left
+              val tmp_r = _copy2ReducedKmerTree(r, acc_tree, tmp_l._2)
+              //return left and right with updated map from right
+              (tmp_l._1, tmp_r._1, addKmers(tmp_r._2, a, id))
+            }
+            (ReducedNode(id, d, left, right), updated_map)
+          }
+        }
+      }
+      val (reduced_tree, kmer_map) = _copy2ReducedKmerTree(tree, null, Map())
+      (reduced_tree,
+        kmer_map.mapValues(x => if(x.size == 1) x.head else reduced_tree.lowestCommonAncestor(query = x)))
+    }
+
 
     /**
       * Method to determine whether given tree is node or leaf
@@ -251,9 +172,7 @@ object KmerTreeUtils {
     */
   case class Node(id: Int, kmers: Kmers, sum_dist: Double, left: Tree[Kmers], right: Tree[Kmers]) extends Tree[Kmers]
 
-
-  def loadKmerTree: File => Node = file => Unpickle[Node].fromBytes(deserialize(file))
-    //Unpickle[Node].fromBytes(ByteBuffer.wrap(Files.readAllBytes(Paths.get(file.getAbsolutePath))))
-    //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[Node]
+  //Unpickle[Node].fromBytes(ByteBuffer.wrap(Files.readAllBytes(Paths.get(file.getAbsolutePath))))
+  //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[Node]
 
 }

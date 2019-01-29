@@ -14,6 +14,7 @@ import utilities.ClusteringUtils.{createDendogram, hierchicalClustering}
   * Description:
   */
 object ConstructPopulationTree {
+
   case class Config(
                      matrix: File = null,
                      sketchesFile: File = null,
@@ -44,39 +45,24 @@ object ConstructPopulationTree {
       //check whether output directory exists. If not, create it.
       verifyDirectory(config.outputDir)
       verifyFile(config.matrix)
-      if(config.sketchesFile != null) verifyFile(config.sketchesFile)
+      if (config.sketchesFile != null) verifyFile(config.sketchesFile)
       constructPopulationTree(config)
     }
   }
 
   def constructPopulationTree(config: Config): Unit = {
     //perfom hierchical clustering of given distance matrix
-    val dendogram = {
+    val reduced_kmer_tree = {
       println(timeStamp + "Loading distance matrix")
       //load distance matrix
       val tmp = createDendogram(config.matrix, config.sketchesFile, config.verbose)
       println(timeStamp + "--Loaded matrix with " + tmp.clusters.size + " samples and " + tmp.matrix.size + " values")
       println(timeStamp + "Clustering samples and constructing kmer-tree")
-      Pickle.intoBytes(hierchicalClustering(tmp, 0, config.verbose)).array()
+      hierchicalClustering(tmp, 0, config.verbose)
     }
     println(timeStamp + "Writing to disk")
-    writeSerialized(dendogram, new File(config.outputDir + "/" + config.prefix + ".rdwt"))
+    writeSerialized(Pickle.intoBytes(reduced_kmer_tree).array(),
+      new File(config.outputDir + "/" + config.prefix + ".rdwt"))
     println(timeStamp + "Successfully completed!")
-
-    /**
-    //serialize to byte array
-    val buf = serialize(dendogram)
-    //create output file
-    val pw = new BufferedOutputStream(new FileOutputStream(config.outputDir + "/" + config.prefix + ".rdwt"))
-    //write bytes to output
-    pw.write(buf)
-    pw.close
-    println(timeStamp + "Successfully completed!")
-      */
-
-    //println(timeStamp + "--Deserializing")
-    //println(Unpickle[Node].fromBytes(
-     // ByteBuffer.wrap(Files.readAllBytes(Paths.get(config.outputDir + "/" + config.prefix + ".rdw")))
-    //))
   }
 }

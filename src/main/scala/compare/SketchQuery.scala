@@ -2,9 +2,9 @@ package compare
 
 import java.io.{File, PrintWriter}
 
-import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, openFileWithIterator}
+import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory, verifyFile}
 import utilities.SketchUtils.loadRedwoodSketch
-import utilities.KmerTreeUtils._
+import utilities.ReducedKmerTreeUtils._
 
 /**
   * Author: Alex N. Salazar
@@ -60,7 +60,7 @@ object SketchQuery {
     }
   }
 
-  def querySketch(config: Config, loaded_tree: Tree[Kmers] = null): Unit = {
+  def querySketch(config: Config, loaded_tree: ReducedKmerTree = null): Unit = {
     //load sketch
     val sketches = {
       //single sketch file provided
@@ -73,34 +73,39 @@ object SketchQuery {
     println(timeStamp + "Found " + sketches.size + " sketches to query")
     println(timeStamp + "Loading kmer-tree")
     //load tree
-    val ktree = if(loaded_tree != null) loaded_tree else loadKmerTree(config.kmerTree)
+    val ktree = if(loaded_tree != null) loaded_tree else loadReducedKmerTree(config.kmerTree)
     if(loaded_tree == null) {
-      println(timeStamp + "--" + ktree.getLeafNames().size + " leafs and " + ktree.getKmerSetSizes().size + " clusters ")
+      println(timeStamp + "--" + ktree.tree.getLeafId2Name().size + " leafs and " +  " clusters ")
     }
     println(timeStamp + "Querying sketches:")
     //compute weights for each strain using LCA of each kmer
-    val (scores, total_kmers) = sketches.foldLeft((Map[String, Int](),0)){ case ((counts, totalk), _sketch) => {
+    val (scores, total_kmers) = sketches.foldLeft((Map[Int, Int](),0)){ case ((counts, totalk), _sketch) => {
       //load sketch
       val sketch = loadRedwoodSketch(_sketch)
       println(timeStamp + "--" + sketch.name)
       //iterate through each kmer and query
       sketch.sketch.keySet.foldLeft((counts, totalk)){ case ((acc_counts, acc_total), kmer) => {
         //get lowest common ancestor
-        val node = ktree.queryLCA(kmer)
+        val node = ktree.lca_map.get(kmer)
         //update counts
         if (node.isEmpty) (acc_counts, acc_total + 1)
         else (acc_counts + (node.get -> (acc_counts.getOrElse(node.get, 0) + 1)), acc_total + 1)
       }}
     }}
     //compute branch proportions based on scores above
-    val branch_proportions = calcualteBranchWeights(ktree, scores).mapValues(_.toDouble / total_kmers)
+    val branch_proportions = ktree.genericCumulative(scores).mapValues(_.toDouble / total_kmers)
     //explained percentage
     val explained_percentage = scores.foldLeft(0.0)((b, a) => a._2 + b) / total_kmers
+    //get leaf ID -> name
+    val leafid2name = ktree.tree.getLeafId2Name()
     println(timeStamp + "Fraction of kmers explained: " + explained_percentage)
     //create output file
     val pw = new PrintWriter(config.outputDir + "/" + config.prefix + ".txt")
-    pw.println("Strain\tWeight")
-    branch_proportions.toList.sortBy(-_._2) foreach { case (strain, weight) => pw.println(strain + "\t" + weight) }
+    pw.println("ID\tName\tWeight")
+    branch_proportions.toList.sortBy(-_._2) foreach { case (id, weight) => {
+      val name = leafid2name.get(id)
+      pw.println(id + "\t" + (if(name.isEmpty) "" else name.get) + "\t" + weight)
+    } }
     pw.close()
 
     //labels provided
@@ -113,11 +118,11 @@ object SketchQuery {
           (columns.head, columns(1))
         }).toMap
         //sanity check
-        assert(tmp.size == ktree.getLeafNames().size, "Unexpected number of leafs found in labels file")
+        assert(tmp.size == ktree.tree.getLeafId2Name().size, "Unexpected number of leafs found in labels file")
         tmp
       }
       //construct map as node -> labels -> weight
-      val node2Labels = constructNode2Labels(config.labelsFile, ktree)
+      val node2Labels = constructNode2Labels(config.labelsFile, ktree.tree)
       //for each node, split it counts to it's corresponding labels proportionally
       val label2Scores = scores.foldLeft(Map[String, Double]()) { case (props, (node, count)) => {
         //get labels for current node
@@ -138,36 +143,24 @@ object SketchQuery {
     println(timeStamp + "Successfully completed!")
   }
 
-  def calcualteBranchWeights(t: Tree[Kmers], scores: Map[String, Int]): Map[String, Int] = {
-    def _calcualteBranchWeights(current: Tree[Kmers], acc: Map[String, Int]): Map[String, Int] = {
-      current match {
-        case Leaf(a, b) => acc + (b -> (scores.getOrElse(b, 0)))
-        case Node(i, k, d, l, r) => {
-          //get cumulative weights of children
-          val updated_prop = _calcualteBranchWeights(l, acc) ++ _calcualteBranchWeights(r, acc)
-          //calculate current node's weight
-          val node_weight = scores.getOrElse(i.toString, 0) + updated_prop(l.getID()) + updated_prop(r.getID())
-          //update acc
-          updated_prop + (i.toString -> node_weight)
-        }
-      }
-    }
-
-    _calcualteBranchWeights(t, Map())
-  }
-
-  def constructNode2Labels(file: File, tree: Tree[Kmers]): Map[String, Map[String, Double]] = {
-    //construct map as node -> labels -> weight
+  /**
+    *
+    * @param file
+    * @param tree
+    * @return
+    */
+  def constructNode2Labels(file: File, tree: ReducedTree): Map[Int, Map[String, Double]] = {
+    //construct map as node -> List(labels)
     val node2labels = {
       //open labels file
-      val tmp = openFileWithIterator(file).toList.map(x => {
+      val leafname2label = openFileWithIterator(file).toList.map(x => {
         val c = x.split("\t");
         (c.head, c(1))
       }).toMap
       //sanity check
-      assert(tmp.size == tree.getLeafNames().size, "Unexpected number of leafs found in labels file")
+      assert(leafname2label.size == tree.getLeafId2Name().size, "Unexpected number of leafs found in labels file")
       //construct node -> labels
-      tree.id2Leafnames().toMap.mapValues(_.map(tmp(_)).toSet)
+      tree.getId2LeafNames().mapValues(_.map(leafname2label(_)))
     }
     //assign weights to the labels of each node
     node2labels.mapValues(x => {

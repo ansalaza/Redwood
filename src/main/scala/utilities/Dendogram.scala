@@ -3,7 +3,8 @@ package utilities
 import java.io.File
 
 import utilities.ClusteringUtils._
-import utilities.KmerTreeUtils.{Kmers, Node, Tree}
+import utilities.KmerTreeUtils.{Kmers, Leaf, Node, Tree}
+import utilities.SketchUtils.loadRedwoodSketch
 
 /**
   * Author: Alex N. Salazar
@@ -17,7 +18,7 @@ import utilities.KmerTreeUtils.{Kmers, Node, Tree}
   * @param matrix
   * @param clusters
   */
-class Dendogram(val matrix: Matrix, val clusters: Clusters) {
+class Dendogram(val matrix: Matrix, val clusters: Clusters, val leaf2sketches: Map[String, File]) {
 
   /**
     * Function to obtain distance of a given pair of IDs aware that the matrix only stores distances in upper-diagonal
@@ -86,21 +87,47 @@ class Dendogram(val matrix: Matrix, val clusters: Clusters) {
       }.minBy(_._2)._2
     }
 
+    /**
+      * Method to update the kmers of clusters that are leafs by ovewriting them with the set difference of leaf kmer
+      * set and the parent intersection
+      * @return Clusters
+      */
+    def updateLeafClusters(): Clusters = {
+      //function to get kmers depending on whether it is a leaf and a sketch map was provided
+      def getKmers: Tree[Kmers] => Kmers = t => {
+        if(leaf2sketches.isEmpty || !t.isLeaf()) t.loadKmers()
+        else loadRedwoodSketch(leaf2sketches(t.getID())).sketch.keySet
+      }
+      //get trees for each cluster
+      val (at, bt) = (clusters(a), clusters(b))
+      //get kmers
+      val (ak, bk) = (getKmers(at), getKmers(bt))
+      //get node intersection if either node is a leaf
+      val parent_kmers = if(at.isLeaf() || bt.isLeaf()) ak.intersect(bk) else empty_kmers
+      //update clusters with node a
+      val tmp = if(!clusters(a).isLeaf()) clusters else clusters + (a -> Leaf(ak.diff(parent_kmers), a))
+      //update with node b
+      if(!clusters(b).isLeaf()) tmp else tmp + (b -> Leaf(bk.diff(parent_kmers),b))
+    }
+
     //create new array of labels by removing old nodes and appending new cluster to front of array wit updated index
     val new_clusters = {
+      //update clusters with leafs, if needed
+      val updated = updateLeafClusters
       //remove old clusters
-      val filtered = clusters.filterNot(x => x._1 == a || x._1 == b)
+      val filtered = updated.filterNot(x => x._1 == a || x._1 == b)
       //create new node cluster
       val new_cluster: Tree[Kmers] = {
         //set left and right sub-trees
-        val (l, r) = if (a < b) (clusters(a), clusters(b)) else (clusters(b), clusters(a))
-        //set kmer union
-        val union = l.loadKmers().union(r.loadKmers())
+        val (l, r) = if (a < b) (updated(a), updated(b)) else (updated(b), updated(a))
+        //set parent kmers
+        val intersection = clusters(a).loadKmers().intersect(clusters(b).loadKmers())
         //create new node
-        Node(id, union, fetchDist(a,b), l, r)
+        Node(id, intersection, fetchDist(a,b), l, r)
       }
       filtered + (id.toString -> new_cluster)
     }
+
     //create new matrix by re-calculating distances using single-linkage
     val new_matrix = {
       //remove old matrix entry of the clusters being merged
