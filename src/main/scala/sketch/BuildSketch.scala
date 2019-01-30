@@ -1,6 +1,6 @@
 package sketch
 
-import java.io.File
+import java.io.{File, PrintWriter}
 
 import atk.ProgressBar.progress
 import bloomfilter.CanGenerateHashFrom
@@ -10,7 +10,7 @@ import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSeri
 import utilities.SequenceUtils._
 import utilities.SequenceFormatUtils.loadSequenceFile
 import utilities.SketchUtils.RedwoodSketch
-import utilities.NumericalUtils.{mean, stdDev}
+import utilities.NumericalUtils.{mean, stdDev, power}
 
 import scala.collection.mutable
 import scala.util.hashing.MurmurHash3
@@ -79,7 +79,7 @@ object BuildSketch {
 
   def buildSketch(config: Config): Unit = {
     println(timeStamp + "Building sketch of " + config.sketchSize + " kmers of size " + config.kmerSize + " for "
-      + config.sampleName + " using " + config.readFile.size + " sequence files")
+      + config.sampleName + " using " + config.readFile.size + " sequence file(s)")
     //create sketch
     var sketch = new mutable.PriorityQueue[(Int, ByteEncoded)]()(Ordering.by(_._1))
     //set mutable sketch size
@@ -127,6 +127,8 @@ object BuildSketch {
 
     //set min coverage
     val min_cov = if(config.isAssembly) 1 else config.minCov
+    //set genome size
+    var genome_size = 0
 
     //iterate through each read file and create sketch (in parallel if multiple threads specified
     config.readFile.foreach(read_file => {
@@ -138,6 +140,8 @@ object BuildSketch {
         val seq = iterator.next()
         //get size of sequence
         val seq_length = seq.size
+        //update genome size if sequence file is an assembly
+        if(config.isAssembly) genome_size += seq_length
         //check sequence at least as big as the specified kmer
         if (seq_length >= config.kmerSize) {
           //obtain reverse complement
@@ -222,6 +226,11 @@ object BuildSketch {
       }
     })
     println(timeStamp + "Completed sketch of size " + sketch.size)
+    //estimate genome size
+    val estimated_genome_size = {
+      if(config.isAssembly) genome_size else estimateGenomeSize(sketch.head._1, config.sketchSize).toInt
+    }
+    println(timeStamp + (if(config.isAssembly) "Genome" else "Estimated genome") + " size of " + estimated_genome_size)
     //get kmers in sketch
     val sketch_kmers = {
       //set sketch map
@@ -239,6 +248,12 @@ object BuildSketch {
         //get standard deviation
         val std_cov = stdDev(sketch_map.map(_._2._1))
         println(timeStamp + "Mean kmer coverage of " + mean_cov + " with standard deviation of " + std_cov)
+        val pw = new PrintWriter(config.outputDir + "/" + config.sampleName + ".coverages.txt")
+        //get coverage -> number of kmers
+        val kmer_coverages = sketch_map.values.map(_._1).groupBy(identity).mapValues(_.size).toList.sortBy(_._1)
+        //output coverages
+        kmer_coverages.foreach(x => pw.println(config.sampleName + "\t" + x._1 + "\t" + x._2))
+        pw.close()
       }
       sketch_map.map(identity)
     }
@@ -249,7 +264,7 @@ object BuildSketch {
     candidateHashes.clear()
     //create redwood sketch object
     println(timeStamp + "Writing to disk")
-    val redwood_sketch = new RedwoodSketch(config.sampleName, config.kmerSize, sketch_kmers)
+    val redwood_sketch = new RedwoodSketch(config.sampleName, config.kmerSize, estimated_genome_size, sketch_kmers)
     //serialize and write to disk
     writeSerialized(
       Pickle.intoBytes(redwood_sketch).array(),
@@ -281,5 +296,19 @@ object BuildSketch {
 
     _smallestKmer(0)
   }
+
+  /**
+    * Method to estimate genome size based on a given max hash and sketch size.
+    * @param max_hash
+    * @param sketch_size
+    * @return Double
+    */
+  def estimateGenomeSize(max_hash: Int, sketch_size: Int): Double = {
+    //get normalized hash value based on 32-bit integer
+    def normalizedHashValue: Int => Long = x => (x.toLong - Int.MinValue) + 1
+    //compute (2^32)*(sketch_size/normalized_hash)
+    normalizedHashValue(Int.MaxValue) * (sketch_size.toDouble / normalizedHashValue(max_hash))
+  }
+
 }
 

@@ -21,7 +21,7 @@ object SketchUtils {
     * @param kmer_length Kmer size
     * @param sketch      Kmer set
     */
-  case class RedwoodSketch(name: String, kmer_length: Int, sketch: Map[Int, (Int, ByteEncoded)])
+  case class RedwoodSketch(name: String, kmer_length: Int, genome_size: Int, sketch: Map[Int, (Int, ByteEncoded)])
 
   /**
     * Function to load a sketch file into a RedwoodSketch object

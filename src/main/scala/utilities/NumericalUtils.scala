@@ -31,6 +31,14 @@ object NumericalUtils {
   }
 
   /**
+    * Method to compute n^exp
+    * @param n
+    * @param exp
+    * @return Int
+    */
+  def power(n: Int, exp: Int): Int = if(exp == 0) 1 else (1 to exp).view.foldLeft(1)((acc, i) => acc * n)
+
+  /**
     * Function to compute minimum of two numbers
     *
     * @param num Implicit numeric class type

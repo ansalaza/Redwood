@@ -13,6 +13,7 @@ import java.io.File
 
 import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile}
 import utilities.ReducedKmerTreeUtils.loadReducedKmerTree
+import utilities.MetaDataUtils.{loadQueryFile, loadColoursFile}
 import utilities.TreeDrawingUtils._
 import doodle.syntax._
 import doodle.jvm.Java2DFrame._
@@ -155,8 +156,7 @@ object TreeTracing {
         val min_width = config.minFreq * config.lineWidth
         println(timeStamp + "Setting min frequency to " + config.minFreq + " (" + min_width + ")")
         //load proportions from query file and ignore given min frequency
-        val tmp = loadQueryFile(config.proportions, config.lineWidth, tree)
-          .map(x => if(x._2 >= min_width) x else (x._1, 0.0))
+        val tmp = loadQueryFile(config.proportions, config.lineWidth).map(x => if(x._2 >= min_width) x else (x._1, 0.0))
         println(timeStamp + "Loaded branch proportions for " + tmp.size + " nodes/leafs")
         tmp
       }

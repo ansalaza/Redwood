@@ -37,7 +37,7 @@ object SketchQuery {
       } text ("Output directory. If it doesn't not exist, the directory will be created.")
       opt[String]("prefix") required() action { (x, c) =>
         c.copy(prefix = x)
-      } text ("Prefix for output file.")
+      } text ("Prefix for output file. Also used as query identifier.")
       note("\nOPTIONAL\t")
       opt[File]("sketches") action { (x, c) =>
         c.copy(sketchesFile = x)
@@ -135,8 +135,8 @@ object SketchQuery {
       }.mapValues(_ / total_kmers)
       //create output file
       val pw2 = new PrintWriter(config.outputDir + "/" + config.prefix + ".labels.txt")
-      pw2.println("Label\tWeight")
-      label2Scores.foreach(x => pw2.println(x._1 + "\t" + x._2))
+      pw2.println("Name\tLabel\tWeight")
+      label2Scores.foreach(x => pw2.println(config.prefix + "\t" + x._1 + "\t" + x._2))
       pw2.close
     }
 
