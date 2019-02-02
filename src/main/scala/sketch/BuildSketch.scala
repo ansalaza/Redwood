@@ -10,7 +10,7 @@ import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSeri
 import utilities.SequenceUtils._
 import utilities.SequenceFormatUtils.loadSequenceFile
 import utilities.SketchUtils.RedwoodSketch
-import utilities.NumericalUtils.{mean, stdDev, power}
+import utilities.NumericalUtils.{mean, stdDev}
 
 import scala.collection.mutable
 import scala.util.hashing.MurmurHash3

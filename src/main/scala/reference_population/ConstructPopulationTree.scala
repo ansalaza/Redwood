@@ -3,8 +3,10 @@ package reference_population
 import java.io._
 
 import boopickle.Default._
-import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSerialized}
+import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSerialized, openFileWithIterator}
 import utilities.ClusteringUtils.{createDendogram, hierchicalClustering}
+import utilities.SketchUtils.{isKmerLengthCompatible, isUniqueNameCompatible, constructSketchesMap}
+import utilities.DistanceUtils.loadMatrix
 
 /**
   * Author: Alex N. Salazar
@@ -53,12 +55,28 @@ object ConstructPopulationTree {
   def constructPopulationTree(config: Config): Unit = {
     //perfom hierchical clustering of given distance matrix
     val reduced_kmer_tree = {
+      println(timeStamp + "Verifying sketches")
+      val all_sketches = openFileWithIterator(config.sketchesFile).toList.map(new File(_))
+      //first verify files actually exist
+      all_sketches.foreach(verifyFile(_))
+      //then, verify kmer length compatability
+      val universal_kmer_length = isKmerLengthCompatible(all_sketches)
+      println(timeStamp + "Using universal kmer-length of " + universal_kmer_length)
+      //then, verify unique name
+      val sketch_names = isUniqueNameCompatible(all_sketches)
       println(timeStamp + "Loading distance matrix")
-      //load distance matrix
-      val tmp = createDendogram(config.matrix, config.sketchesFile, config.verbose)
-      println(timeStamp + "--Loaded matrix with " + tmp.clusters.size + " samples and " + tmp.matrix.size + " values")
+      val (matrix, columns) = loadMatrix(config.matrix)
+      //assert all leaf and sketch names are accounted for
+      assert(sketch_names.size == columns.size, "Not all samples/sketches are accounted for: " +
+        sketch_names.size + " sketches vs " + columns.size + " columns")
+      println(timeStamp + "--Loaded matrix with " + columns.size + " samples and " + matrix.size + " values")
+      //create initial dendogram
+      val dendo = {
+        createDendogram(matrix, sketch_names, universal_kmer_length,
+          constructSketchesMap(config.sketchesFile), config.verbose)
+      }
       println(timeStamp + "Clustering samples and constructing kmer-tree")
-      hierchicalClustering(tmp, 0, config.verbose)
+      hierchicalClustering(dendo, 0, config.verbose)
     }
     println(timeStamp + "Writing to disk")
     writeSerialized(Pickle.intoBytes(reduced_kmer_tree).array(),

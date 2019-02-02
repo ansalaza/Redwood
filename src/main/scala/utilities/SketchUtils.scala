@@ -29,7 +29,8 @@ object SketchUtils {
     * @return RedwoodSketch
     */
   def loadRedwoodSketch: File => RedwoodSketch = file => Unpickle[RedwoodSketch].fromBytes(deserialize(file))
-    //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
+
+  //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
 
   /**
     * Load and verify sketches (existence, uniqueness, kmer-length compatability) for given list of files
@@ -42,17 +43,40 @@ object SketchUtils {
     _sketches.foreach(verifyFile(_))
     //load sketches
     val sketches = _sketches.map(loadRedwoodSketch(_))
-    //group by kmer length
-    val kmer_lengths = sketches.map(x => (x.name, x.kmer_length)).groupBy(_._2).mapValues(_.map(_._1)).toList.sortBy(_._2.size)
-    //sanity check
-    assert(kmer_lengths.size == 1, "One more sketches have different kmer lengths:\n" +
+    //get universal kmer length
+    val kmer_length = isKmerLengthCompatible(_sketches)
+    //verify sketch name uniqueness
+    isUniqueNameCompatible(_sketches)
+    (sketches.map(x => (x.name, x.sketch.keySet)).toMap, kmer_length)
+  }
+
+  /**
+    * Function to compute verify that all given sketches have the same kmer-length. If true, returns universal
+    * kmer-length
+    * @return Int
+    */
+  def isKmerLengthCompatible: List[File] => Int = sketches => {
+    //construct list of 2-tuples: (kmer-length, list of sample names)
+    val kmer_lengths = sketches.map(x => {val sketch = loadRedwoodSketch(x); (sketch.name, sketch.kmer_length)})
+      .groupBy(_._2).mapValues(_.map(_._1)).toList.sortBy(_._2.size)
+    //verify all sketches have the same kmer length
+    assert(kmer_lengths.size == 1, "One or more sketches have different kmer lengths:\n" +
       kmer_lengths.drop(1).map(x => "--kmer length of " + x._1 + " for samples: " + x._2.mkString(",")))
-    //group by name, get counts for each name
-    val all_names = sketches.map(_.name).groupBy(identity).mapValues(_.size)
+    //return universal kmer length
+    kmer_lengths.head._1
+  }
+
+  /**
+    * Function to compute and verify that all given sketches have unique name. If true, return list of all sketch names
+    * @return List[String]
+    */
+  def isUniqueNameCompatible: List[File] => List[String] = sketches => {
+    val all_names =
+      sketches.map(x => {val sketch = loadRedwoodSketch(x); sketch.name}).groupBy(identity).mapValues(_.size)
     //sanity check
     assert(all_names.forall(_._2 == 1), "The following sketch names are not unique: " +
       all_names.filter(_._2 > 1).map(_._1).mkString(","))
-    (sketches.map(x => (x.name, x.sketch.keySet)).toMap, kmer_lengths.head._1)
+    all_names.keys.toList
   }
 
   /**
@@ -93,38 +117,26 @@ object SketchUtils {
   }
 
   /**
-    * Method to obtain all kmers unique to a given list of samples. First constructs the set intersection between the
-    * given list of samples. Then, iteratively subtracts kmers from the constructed intersection using kmers from all
-    * other samples.
+    * Function to obtain minimum sketch size given a list of sketch files
     *
-    * @param names        Name of samples
-    * @param sketches_map Map of sample names -> sketch file
-    * @return Kmer-set intersection as Set[Long]
+    * @return Int
     */
-  def uniqueKmers(names: List[String], sketches_map: Map[String, File]): Set[Int] = {
-    /**
-      * Function to corresponding kmer set of given sample/key
-      *
-      * @return Set[Long]
-      */
-    def fetch: String => Set[Int] = key => {
-      //attempt to get sketch file
-      val sketch = sketches_map.get(key)
-      assert(sketch.nonEmpty, "Could find corresponding sketch file for sample: " + key)
-      //load sketch and extract kmer hashes
-      loadRedwoodSketch(sketch.get).sketch.keySet
+  def loadMinimumSketchSize: List[File] => Int = sketches => {
+    //construct map of sketch size -> List[sketch names]
+    val size2names = sketches.map(x => {
+      val sketch = loadRedwoodSketch(x)
+      (sketch.name, sketch.sketch.size)
+    }).groupBy(_._2).mapValues(_.map(_._1))
+    //all sketches have the same size
+    if (size2names.size == 1) size2names.head._1
+    //different sketches have different sizes
+    else {
+      //get min sketch size
+      val min_sketch_size = size2names.minBy(_._1)
+      println(timeStamp + "--Input sketches contain different sizes: " + size2names.map(_._1).mkString(","))
+      println(timeStamp + "----Using sketch size of " + min_sketch_size._1 + " where appropriate")
+      //return min sketch size
+      min_sketch_size._1
     }
-
-    //iterate through all given samples and construct intersecting set
-    val intersect = {
-      //obtain initial kmer set
-      val initial_set = fetch(names.head)
-      names.tail.foldLeft(initial_set)((acc_set, name) => acc_set.union(fetch(name)))
-    }
-    //set of all intersecting names
-    val names_set = names.toSet
-    //iteratively perform set difference between the sample intersect above and all other samples
-    sketches_map.toList.filter(x => !names_set(x._1))
-      .foldLeft(intersect) { case (acc_intersect, (name, sketch)) => acc_intersect.diff(fetch(name)) }
   }
 }

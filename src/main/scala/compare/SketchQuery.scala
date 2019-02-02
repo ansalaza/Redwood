@@ -5,6 +5,7 @@ import java.io.{File, PrintWriter}
 import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory, verifyFile}
 import utilities.SketchUtils.loadRedwoodSketch
 import utilities.ReducedKmerTreeUtils._
+import utilities.NumericalUtils.choose
 
 /**
   * Author: Alex N. Salazar
@@ -74,17 +75,32 @@ object SketchQuery {
     println(timeStamp + "Loading kmer-tree")
     //load tree
     val ktree = if(loaded_tree != null) loaded_tree else loadReducedKmerTree(config.kmerTree)
+    //log info
     if(loaded_tree == null) {
       println(timeStamp + "--" + ktree.tree.getLeafId2Name().size + " leafs and " +  " clusters ")
+      println(timeStamp + "--Global sketch size of tree is " + ktree.min_sketch_size)
     }
+    //set curried-probability function
+    //val getProb = computeProbability(ktree.kmer_length, ktree.min_sketch_size)
     println(timeStamp + "Querying sketches:")
     //compute weights for each strain using LCA of each kmer
     val (scores, total_kmers) = sketches.foldLeft((Map[Int, Int](),0)){ case ((counts, totalk), _sketch) => {
-      //load sketch
-      val sketch = loadRedwoodSketch(_sketch)
-      println(timeStamp + "--" + sketch.name)
+      //get kmers and sketch name
+      val (kmers, name) = {
+        //load sketch
+        val sketch = loadRedwoodSketch(_sketch)
+        println(timeStamp + "--" + sketch.name)
+        //sketch size is the same as global sketch size in tree, return as is
+        if(sketch.sketch.size == ktree.min_sketch_size) (sketch.sketch.keySet, sketch.name)
+        //need to adjust kmers in sketch
+        else {
+          println("----Adjusting sketch size to global sketch size in tree")
+          //adjust by returning the smallest X kmers in the sketch (X = global sketch size)
+          (sketch.sketch.keySet.toList.sorted.take(ktree.min_sketch_size), sketch.name)
+        }
+      }
       //iterate through each kmer and query
-      sketch.sketch.keySet.foldLeft((counts, totalk)){ case ((acc_counts, acc_total), kmer) => {
+        kmers.foldLeft((counts, totalk)){ case ((acc_counts, acc_total), kmer) => {
         //get lowest common ancestor
         val node = ktree.lca_map.get(kmer)
         //update counts
@@ -141,6 +157,38 @@ object SketchQuery {
     }
 
     println(timeStamp + "Successfully completed!")
+  }
+
+  /**
+    * Curried-method to compute the probability of sharing at least X kmers in a given node
+    * @param kmer_length
+    * @param sketch_size
+    * @param size1
+    * @param size2
+    * @param shared
+    * @return
+    */
+  def computeProbability(kmer_length: Int, sketch_size: Int)
+                        (size1: Int, size2: Int, shared: Int): Double =  {
+    /**
+      * Function to compute probability of a random kmer in a random genome of given length
+      * @return Double
+      */
+    def probRandomKmer: Int => Double = x => (x.toDouble / (x + Math.pow(4, kmer_length)))
+
+    /**
+      * Function to compute expected jaccard index between to random genomes given their corresponding probability of
+      * observing a random kmer
+      * @return Double
+      */
+    def expectedJI: (Double, Double) => Double =(x,y) => (x*y)/(x+y - (x*y))
+
+    //set expected jaccard index
+    val eji = expectedJI(probRandomKmer(size1), probRandomKmer(size2))
+
+    //compute probability
+    //(0 to shared).view.foldLeft(0.0)((acc, i) => {acc + choose(sketch_size, i)*Math.pow(eji, i) * Math.pow(1 - eji, sketch_size - i)})
+    ???
   }
 
   /**

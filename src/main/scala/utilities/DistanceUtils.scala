@@ -2,8 +2,10 @@ package utilities
 
 import java.io.File
 
+import utilities.ClusteringUtils.Matrix
 import utilities.FileHandling.{openFileWithIterator, timeStamp}
 import utilities.NumericalUtils.min
+
 import scala.math.log
 import scala.collection.mutable
 
@@ -48,7 +50,7 @@ object DistanceUtils {
     * @param file
     * @return 2-tuple: (Map where key is 2-tuple of sample ID -> distance, List of all IDs)
     */
-  def loadMatrix(file: File): (Map[(String, String), Double], List[String]) = {
+  def loadMatrix(file: File): (Matrix, List[String]) = {
     //get identifiers
     val index2ID = openFileWithIterator(file).next().split("\t").drop(1).zipWithIndex.map(_.swap).toMap
     //total identfiers

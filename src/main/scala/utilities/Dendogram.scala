@@ -2,9 +2,10 @@ package utilities
 
 import java.io.File
 
+import utilities.FileHandling.timeStamp
 import utilities.ClusteringUtils._
 import utilities.KmerTreeUtils.{Kmers, Leaf, Node, Tree}
-import utilities.SketchUtils.loadRedwoodSketch
+import utilities.SketchUtils.{loadRedwoodSketch}
 
 /**
   * Author: Alex N. Salazar
@@ -18,14 +19,19 @@ import utilities.SketchUtils.loadRedwoodSketch
   * @param matrix
   * @param clusters
   */
-class Dendogram(val matrix: Matrix, val clusters: Clusters, val leaf2sketches: Map[String, File]) {
+class Dendogram(val matrix: Matrix,
+                val clusters: Clusters,
+                val leaf2sketches: Map[String, File],
+                val min_sketch_size: Int,
+                val kmer_length: Int) {
 
   /**
     * Function to obtain distance of a given pair of IDs aware that the matrix only stores distances in upper-diagonal
+    *
     * @return Double
     */
-  private def fetchDist: (String, String) => Double = (x,y) =>
-    if(x == y) 0.0 else if(matrix.contains((x,y))) matrix((x,y)) else matrix((y,x))
+  private def fetchDist: (String, String) => Double = (x, y) =>
+    if (x == y) 0.0 else if (matrix.contains((x, y))) matrix((x, y)) else matrix((y, x))
 
   /**
     * Override to output matrix as a tab-delimited string
@@ -61,8 +67,8 @@ class Dendogram(val matrix: Matrix, val clusters: Clusters, val leaf2sketches: M
     * Method to merge two given clusters (trees) and update labels (trees) and matrix with re-calculated
     * single-linkage distances
     *
-    * @param a ID of cluster to merge (order independent)
-    * @param b ID of cluster to merge (order independent)
+    * @param a  ID of cluster to merge (order independent)
+    * @param b  ID of cluster to merge (order independent)
     * @param id ID given for the new merged cluster
     * @return 2-tuple: (Matrix, Clusters)
     */
@@ -90,24 +96,45 @@ class Dendogram(val matrix: Matrix, val clusters: Clusters, val leaf2sketches: M
     /**
       * Method to update the kmers of clusters that are leafs by ovewriting them with the set difference of leaf kmer
       * set and the parent intersection
+      *
       * @return Clusters
       */
     def updateLeafClusters(): Clusters = {
-      //function to get kmers depending on whether it is a leaf and a sketch map was provided
-      def getKmers: Tree[Kmers] => Kmers = t => {
-        if(leaf2sketches.isEmpty || !t.isLeaf()) t.loadKmers()
-        else loadRedwoodSketch(leaf2sketches(t.getID())).sketch.keySet
+      /**
+        * Function to return a 3-tuple for a node: (Kmers, genome size, sketch size). Note the second to last applies
+        * to leafs, otherwise set to -1 value.
+        */
+      def loadInfo: Tree[Kmers] => (Kmers, Int, Int) = t => {
+        if (leaf2sketches.isEmpty || !t.isLeaf()) (t.loadKmers(), -1, -1)
+        else {
+          //load sketch
+          val sketch = loadRedwoodSketch(leaf2sketches(t.getID()))
+          //get size of current sketch
+          val sketch_size = sketch.sketch.size
+          //adjust kmers based on minimum sketch size, if needed
+          val kmers = {
+            //min sketch size is same as current sketch size
+            if(min_sketch_size == sketch_size) sketch.sketch.keySet
+            //adjust sketch by getting X smallest kmers (X = min sketch size)
+            else {
+              println(timeStamp + "-----Adjusting sketch to size " + min_sketch_size + " for " + sketch.name)
+              sketch.sketch.keySet.toList.sorted.take(min_sketch_size).toSet
+            }
+          }
+          (kmers, sketch.genome_size, min_sketch_size)
+        }
       }
+
       //get trees for each cluster
       val (at, bt) = (clusters(a), clusters(b))
-      //get kmers
-      val (ak, bk) = (getKmers(at), getKmers(bt))
+      //load sketches
+      val (as, bs) = (loadInfo(at), loadInfo(bt))
       //get node intersection if either node is a leaf
-      val parent_kmers = if(at.isLeaf() || bt.isLeaf()) ak.intersect(bk) else empty_kmers
+      val parent_kmers = if (at.isLeaf() || bt.isLeaf()) as._1.intersect(bs._1) else empty_kmers
       //update clusters with node a
-      val tmp = if(!clusters(a).isLeaf()) clusters else clusters + (a -> Leaf(ak.diff(parent_kmers), a))
+      val tmp = if (!clusters(a).isLeaf()) clusters else clusters + (a -> Leaf(as._1.diff(parent_kmers), a, as._2, as._3))
       //update with node b
-      if(!clusters(b).isLeaf()) tmp else tmp + (b -> Leaf(bk.diff(parent_kmers),b))
+      if (!clusters(b).isLeaf()) tmp else tmp + (b -> Leaf(bs._1.diff(parent_kmers), b, bs._2, bs._3))
     }
 
     //create new array of labels by removing old nodes and appending new cluster to front of array wit updated index
@@ -123,7 +150,7 @@ class Dendogram(val matrix: Matrix, val clusters: Clusters, val leaf2sketches: M
         //set parent kmers
         val intersection = clusters(a).loadKmers().intersect(clusters(b).loadKmers())
         //create new node
-        Node(id, intersection, fetchDist(a,b), l, r)
+        Node(id, intersection, fetchDist(a, b), l, r)
       }
       filtered + (id.toString -> new_cluster)
     }

@@ -59,7 +59,7 @@ object TreeDrawingUtils {
       */
     def _treeDrawer(current: ReducedTree, acc: Image): Image = {
       current match {
-        case ReducedLeaf(a,b) => acc
+        case ReducedLeaf(a,b,c) => acc
         case ReducedNode(i, d, l, r) => {
           //update left right subtree
           val updated_image = _treeDrawer(l, acc).on(_treeDrawer(r, acc))
@@ -158,7 +158,7 @@ object TreeDrawingUtils {
       //check current (sub)tree
       current match {
         //leaf, add x,y coord
-        case ReducedLeaf(a,b) => acc + (a -> (canvas._1, leaf2ycoord(b)))
+        case ReducedLeaf(a,b,c) => acc + (a -> (canvas._1, leaf2ycoord(b)))
         //node
         case ReducedNode(i, d, l, r) => {
           //Update left and right sub-trees

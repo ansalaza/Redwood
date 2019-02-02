@@ -18,25 +18,37 @@ object NumericalUtils {
     * @param k
     * @return Int
     */
-  def choose(n: Int, k: Int): Int = {
+  def choose(n: Int, k: Int): (List[Int], List[Int]) = {
+
     /**
-      * Method to compute factorial of an INT
-      *
-      * @param f Input number
-      * @return Int
+      * Functioni to get a list of number representing the factorial expression
+      * @param f Number
+      * @return List[Int]
       */
-    def fact(f: Int): Int = (1 to f).foldLeft(1)(_ * _)
+    def factorialExpression(f: Int): List[Int] = (1 to f).toList
+
     //compute n choose k
-    if (k == 0 || k == n) 1 else fact(n) / ((fact(k) * fact(n - k)))
+    if (k == 0 || k == n) (List(1), List(1))
+    else {
+      //construct map integer -> integer count representing the entire denominator factorial expression
+      val denom_map = (factorialExpression(n - k) ::: factorialExpression(k)).groupBy(identity).mapValues(_.size)
+      //cancel out numerator and get final count of denominator
+      val (remaining_denom, remaining_num) = {
+        //iterate through numerator factorial expression
+        factorialExpression(n).foldLeft((denom_map, List[Int]())){case ((denom_remaining, num_remaining), number) => {
+          //check count in the denominator
+          val count = denom_map.get(number)
+          //does not appear in the denominator, stays in numerator
+          if(count.isEmpty) (denom_remaining, number :: num_remaining)
+          //appears in the denominator, subtract count by 1
+          else (denom_remaining + (number -> (count.get - 1)), num_remaining)
+        }}
+      }
+      //compute product of remaining numerator over remaining denominator
+      (remaining_num, remaining_denom.filter(_._2 > 0).keys.toList)
+    }
   }
 
-  /**
-    * Method to compute n^exp
-    * @param n
-    * @param exp
-    * @return Int
-    */
-  def power(n: Int, exp: Int): Int = if(exp == 0) 1 else (1 to exp).view.foldLeft(1)((acc, i) => acc * n)
 
   /**
     * Function to compute minimum of two numbers

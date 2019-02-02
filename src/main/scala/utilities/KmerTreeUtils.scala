@@ -31,7 +31,7 @@ object KmerTreeUtils {
     def inOrderTraversal[Kmers](tree: Tree[Kmers] = this): List[String] = {
       def _inOrderTraversal[Kmers](current: Tree[Kmers], acc: List[String]): List[String] = {
         current match {
-          case Leaf(a, b) => b :: acc
+          case Leaf(a, b, c, d) => b :: acc
           case Node(i, a, d, l, r) => {
             val left = (_inOrderTraversal(l, acc))
             val right = (_inOrderTraversal(r, acc))
@@ -71,11 +71,11 @@ object KmerTreeUtils {
         }
         current match {
           //node is a leaf
-          case Leaf(a,b) => {
+          case Leaf(a,b,c,d) => {
             //leaf id
             val id = old2new(b)
             //set reduced leaf node
-            val leaf_node: ReducedTree = ReducedLeaf(id, b)
+            val leaf_node: ReducedTree = ReducedLeaf(id, b, c)
             //update kmer map with current leaf kmers
             (leaf_node, addKmers(acc_map, a, id))
           }
@@ -110,7 +110,7 @@ object KmerTreeUtils {
       * @return Boolean
       */
     def isLeaf[Kmers](tree: Tree[Kmers] = this): Boolean = tree match {
-      case Leaf(a, b) => true;
+      case Leaf(a, b, c, d) => true;
       case _ => false
     }
 
@@ -160,7 +160,7 @@ object KmerTreeUtils {
     *
     * @param kmers value of leaf as type A
     */
-  case class Leaf(kmers: Kmers, id: String) extends Tree[Kmers]
+  case class Leaf(kmers: Kmers, id: String, genome_size: Int, sketch_size: Int) extends Tree[Kmers]
 
   /**
     * Node of a tree

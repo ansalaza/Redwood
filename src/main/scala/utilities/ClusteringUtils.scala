@@ -3,10 +3,9 @@ package utilities
 import java.io.File
 
 import utilities.FileHandling.{timeStamp}
-import utilities.SketchUtils.{constructSketchesMap}
+import utilities.SketchUtils.loadMinimumSketchSize
 import utilities.KmerTreeUtils.{Kmers, Leaf, Tree}
 import utilities.ReducedKmerTreeUtils.ReducedKmerTree
-import utilities.DistanceUtils.loadMatrix
 
 /**
   * Author: Alex N. Salazar
@@ -22,32 +21,36 @@ object ClusteringUtils {
   val empty_kmers: Kmers = Set()
 
   /**
-    * Method to create an DistanceMatrix object given a matrix file object
-    *
-    * @param matrix_file
-    * @param sketches_file
+    * Method to create an initial dendogram given a matrix and column identifiers. Optionally, universal kmer-length, a
+    * map of sketch name -> sketch file, and verbosity level
+    * @param matrix
+    * @param columns
+    * @param kmer_length
+    * @param sketches_map
     * @param verbose
-    * @return
+    * @return Dendogram
     */
-  def createDendogram(matrix_file: File,
-                      sketches_file: File = null,
+  def createDendogram(matrix: Matrix,
+                      columns: List[String],
+                      kmer_length: Int = -1,
+                      sketches_map: Map[String, File] = Map(),
                       verbose: Boolean = false): Dendogram = {
-    //load matrix
-    val (matrix, all_leafs) = loadMatrix(matrix_file)
-    //load sketches, if they exist
-    val sketches_map = constructSketchesMap(sketches_file)
+    //set minimum sketch size to use
+    val min_sketch_size = if(sketches_map.isEmpty) -1 else loadMinimumSketchSize(sketches_map.values.toList)
     //create initial cluster map where key is node/leaf ID -> Tree[Kmers] (initial just the leaf)
-    val leafs = all_leafs.map(id => (id, new Leaf(empty_kmers, id))).toMap
+    val leafs = columns.map(id => (id, new Leaf(empty_kmers, id, -1, min_sketch_size))).toMap
     if (verbose) leafs.foreach(x => println(timeStamp + "--Leafs: " + (x._2.loadAsLeaf().id, x._2.loadKmers().size)))
     //return DistanceMatrix object
-    new Dendogram(matrix, leafs, sketches_map)
+    new Dendogram(matrix, leafs, sketches_map, min_sketch_size, kmer_length)
   }
 
   /**
-    * Method to perform hierchical clustering given a DistanceMatrix object using single-linkage distance metric
-    *
-    * @param matrix DistanceMarix object
-    * @return DistanceMatrix
+    * Method to perform hierarchical clustering for given dendogram, initial node ID identifier. Optional, verbosity
+    * level. Outputs a reduced-kmer tree
+    * @param dendogram
+    * @param acc_node_id
+    * @param verbose
+    * @return ReducedKmerTree
     */
   def hierchicalClustering(dendogram: Dendogram,
                            acc_node_id: Int,
@@ -61,7 +64,7 @@ object ClusteringUtils {
         val old2new = dendogram.clusters.head._2.inOrderTraversal().zipWithIndex.toMap
         //create reduced tree along with kmer map
         val (rt, km) = dendogram.clusters.head._2.copy2ReducedKmerTree[Kmers](old2new = old2new)
-        ReducedKmerTree(rt, km)
+        ReducedKmerTree(rt, km, dendogram.min_sketch_size, dendogram.kmer_length)
       }
     //more clusters to merge
     else {
@@ -73,7 +76,9 @@ object ClusteringUtils {
       //merge clusters and update matrix and labels with new distances
       val (new_matrix, new_clusters) = dendogram.mergeClusters(closest_pair._1, closest_pair._2, acc_node_id)
       //continue clustering
-      hierchicalClustering(new Dendogram(new_matrix, new_clusters, dendogram.leaf2sketches), acc_node_id + 1, verbose)
+      hierchicalClustering(
+        new Dendogram(new_matrix, new_clusters, dendogram.leaf2sketches,
+          dendogram.min_sketch_size,dendogram.kmer_length), acc_node_id + 1, verbose)
     }
   }
 
