@@ -84,7 +84,7 @@ object SketchQuery {
     //val getProb = computeProbability(ktree.kmer_length, ktree.min_sketch_size)
     println(timeStamp + "Querying sketches:")
     //compute weights for each strain using LCA of each kmer
-    val (scores, total_kmers) = sketches.foldLeft((Map[Int, Int](),0)){ case ((counts, totalk), _sketch) => {
+    val (scores, total_kmers) = sketches.foldLeft((Map[Int, Double](),0)){ case ((counts, totalk), _sketch) => {
       //get kmers and sketch name
       val (kmers, name) = {
         //load sketch
@@ -105,11 +105,11 @@ object SketchQuery {
         val node = ktree.lca_map.get(kmer)
         //update counts
         if (node.isEmpty) (acc_counts, acc_total + 1)
-        else (acc_counts + (node.get -> (acc_counts.getOrElse(node.get, 0) + 1)), acc_total + 1)
+        else (acc_counts + (node.get -> (acc_counts.getOrElse(node.get, 0.0) + 1)), acc_total + 1)
       }}
     }}
     //compute branch proportions based on scores above
-    val branch_proportions = ktree.genericCumulative(scores).mapValues(_.toDouble / total_kmers)
+    val branch_proportions = ktree.genericCumulative(scores).mapValues(_ / total_kmers)
     //explained percentage
     val explained_percentage = scores.foldLeft(0.0)((b, a) => a._2 + b) / total_kmers
     //get leaf ID -> name
@@ -153,6 +153,7 @@ object SketchQuery {
       val pw2 = new PrintWriter(config.outputDir + "/" + config.prefix + ".labels.txt")
       pw2.println("Name\tLabel\tWeight")
       label2Scores.foreach(x => pw2.println(config.prefix + "\t" + x._1 + "\t" + x._2))
+      pw2.println(config.prefix + "\tUnique\t" + (1.0 - explained_percentage))
       pw2.close
     }
 

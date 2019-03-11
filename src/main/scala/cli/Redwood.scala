@@ -21,11 +21,12 @@ object Redwood {
         "distance          Compute the mash distance matrix of two or more sketches.\n"+
         "update            Update existing mash distance matrix with new sketches.\n\n" +
         "KMER TREE\n" +
-        "tree              Build kmer-based population tree from a given distance matrix.\n" +
+        "redwood-tree      Build kmer-tree from a given phylo-tree and list of sketches.\n" +
         "tree-drawer       Visualize a given tree.\n"+
         "tree-metrics      Obtain summary metrics for given kmer tree.\n" +
         "query             Query kmers from a sketch against a given kmer-tree.\n" +
-        "query-serially    Query multiple sketches serially.\n\n"
+        "query-serially    Query multiple sketches serially.\n" +
+        "query-drawer      Draw (labeled) queries as stacked-boxplots.\n\n"
       )
 
     if (args.length == 0) {
@@ -37,11 +38,12 @@ object Redwood {
         case "sketch-serially" => sketch.BuildSketchSerially.main(args.drop(1))
         case "distance" => compare.SketchDistance.main(args.drop(1))
         case "update" => compare.UpdateMatrix.main(args.drop(1))
-        case "tree" => reference_population.ConstructPopulationTree.main(args.drop(1))
+        case "redwood-tree" => reference_population.ConstructRedwoodTree.main(args.drop(1))
         case "tree-drawer" => vizualization.TreeTracing.main(args.drop(1))
         case "tree-metrics" => reference_population.TreeMetrics.main(args.drop(1))
         case "query" => compare.SketchQuery.main(args.drop(1))
         case "query-serially" => compare.SketchQuerySerially.main(args.drop(1))
+        case "query-drawer" => vizualization.QueryLabelOverview.main(args.drop(1))
         case "prep-data" => sketch.PrepareData.main(args.drop(1))
         case _ => println(help)
       }

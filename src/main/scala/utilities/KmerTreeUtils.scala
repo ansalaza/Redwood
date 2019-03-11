@@ -31,7 +31,7 @@ object KmerTreeUtils {
     def inOrderTraversal[Kmers](tree: Tree[Kmers] = this): List[String] = {
       def _inOrderTraversal[Kmers](current: Tree[Kmers], acc: List[String]): List[String] = {
         current match {
-          case Leaf(a, b, c, d) => b :: acc
+          case Leaf(i,k,d,g,s) => i :: acc
           case Node(i, a, d, l, r) => {
             val left = (_inOrderTraversal(l, acc))
             val right = (_inOrderTraversal(r, acc))
@@ -71,16 +71,16 @@ object KmerTreeUtils {
         }
         current match {
           //node is a leaf
-          case Leaf(a,b,c,d) => {
+          case Leaf(i,k,d,g,s) => {
             //leaf id
-            val id = old2new(b)
-            //set reduced leaf node
-            val leaf_node: ReducedTree = ReducedLeaf(id, b, c)
+            val id = old2new(i)
+            //set reduced leaf node; drop internally added 'l' char from name
+            val leaf_node: ReducedTree = new ReducedLeaf(id, i.drop(1), d, g)
             //update kmer map with current leaf kmers
-            (leaf_node, addKmers(acc_map, a, id))
+            (leaf_node, addKmers(acc_map, k, id))
           }
           //node is a node
-          case Node(i, a, d, l, r) => {
+          case Node(i, k, d, l, r) => {
             //get node id
             val id = old2new(i.toString)
             //set left and right subtree with updated map
@@ -90,7 +90,7 @@ object KmerTreeUtils {
               //then set right subtree using updated map from left
               val tmp_r = _copy2ReducedKmerTree(r, acc_tree, tmp_l._2)
               //return left and right with updated map from right
-              (tmp_l._1, tmp_r._1, addKmers(tmp_r._2, a, id))
+              (tmp_l._1, tmp_r._1, addKmers(tmp_r._2, k, id))
             }
             (ReducedNode(id, d, left, right), updated_map)
           }
@@ -110,7 +110,7 @@ object KmerTreeUtils {
       * @return Boolean
       */
     def isLeaf[Kmers](tree: Tree[Kmers] = this): Boolean = tree match {
-      case Leaf(a, b, c, d) => true;
+      case Leaf(a, b, c, d, e) => true;
       case _ => false
     }
 
@@ -156,21 +156,24 @@ object KmerTreeUtils {
 
 
   /**
-    * Leaf node of a Tree
-    *
-    * @param kmers value of leaf as type A
+    * Leaf-node
+    * @param id ID of leaf as String
+    * @param kmers Kmer set, if any
+    * @param dist branch distance
+    * @param genome_size Genome size of leaf
+    * @param sketch_size Sketch size of leaf
     */
-  case class Leaf(kmers: Kmers, id: String, genome_size: Int, sketch_size: Int) extends Tree[Kmers]
+  case class Leaf(id: String, kmers: Kmers, dist: Double, genome_size: Int, sketch_size: Int) extends Tree[Kmers]
 
   /**
     * Node of a tree
     *
-    * @param id    Node ID
-    * @param kmers Value of a node as type A
+    * @param id    Node ID as INT
+    * @param kmers kmer set, if any
     * @param left  Left branch of the node as Tree[A]
     * @param right Right branch of the node as Tree[A]
     */
-  case class Node(id: Int, kmers: Kmers, sum_dist: Double, left: Tree[Kmers], right: Tree[Kmers]) extends Tree[Kmers]
+  case class Node(id: Int, kmers: Kmers, dist: Double, left: Tree[Kmers], right: Tree[Kmers]) extends Tree[Kmers]
 
   //Unpickle[Node].fromBytes(ByteBuffer.wrap(Files.readAllBytes(Paths.get(file.getAbsolutePath))))
   //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[Node]

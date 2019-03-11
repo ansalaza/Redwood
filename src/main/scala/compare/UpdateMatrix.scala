@@ -3,7 +3,7 @@ package compare
 import java.io.{File, PrintWriter}
 
 import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory}
-import utilities.SketchUtils.{loadVerifySketches}
+import utilities.SketchUtils.{loadSketches, loadRedwoodSketch}
 import utilities.DistanceUtils.{computeMashDist, fetchDistance,loadMatrix}
 import atk.ProgressBar.progress
 import scala.annotation.tailrec
@@ -59,9 +59,9 @@ object UpdateMatrix {
       //get list of sketches from input parameter
       println(timeStamp + "Loading sketches")
       //get old sketches
-      val old = loadVerifySketches(openFileWithIterator(config.oldSketches).toList.map(new File(_)))
+      val old = loadSketches(openFileWithIterator(config.oldSketches).toList.map(new File(_)))
       //get new sketches
-      val news = loadVerifySketches(openFileWithIterator(config.newSketches).toList.map(new File(_)))
+      val news = loadSketches(openFileWithIterator(config.newSketches).toList.map(new File(_)))
       //sanity check
       assert(old._2 == news._2, "Kmer-length from existing sketches is not the same as kmer-length from new sketches")
       //get new ids already in the matrix, if any
@@ -71,7 +71,8 @@ object UpdateMatrix {
         println(timeStamp + "--These sketches will be removed")
       }
       assert(config.threads > 0, "Number of threads specified is a non-positive integer")
-      updateMatrix(old._1, news._1.filterNot(x => repeat_ids(x._1)), old._2, config)
+      updateMatrix(old._1.mapValues(loadRedwoodSketch(_).sketch.keySet),
+        news._1.filterNot(x => repeat_ids(x._1)).mapValues(loadRedwoodSketch(_).sketch.keySet), old._2, config)
     }
   }
 

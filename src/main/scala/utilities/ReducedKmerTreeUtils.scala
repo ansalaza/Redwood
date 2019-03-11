@@ -4,6 +4,7 @@ import java.io.File
 
 import utilities.FileHandling.deserialize
 import boopickle.Default._
+import utilities.KmerTreeUtils.Leaf
 
 /**
   * Author: Alex N. Salazar
@@ -16,6 +17,16 @@ object ReducedKmerTreeUtils {
 
 
   sealed trait ReducedTree {
+
+    def getId2Distances(tree: ReducedTree = this): List[(Int, Double)] = {
+      def _getId2Distances(current: ReducedTree, acc: List[(Int,Double)]): List[(Int,Double)] = {
+        current match {
+          case ReducedLeaf(i, n, d, g) => (i,d) :: acc
+          case ReducedNode(i,d,l,r) => ((i,d) :: _getId2Distances(l, acc)) ::: _getId2Distances(r, acc)
+        }
+      }
+      _getId2Distances(tree, List())
+    }
 
     /**
       * Method to get lowest common ancestor for a given list of node/leaf IDs
@@ -53,6 +64,19 @@ object ReducedKmerTreeUtils {
       _lowestCommonAncestor(tree, tree.loadAsNode().getID())
     }
 
+    def getLeaf2Parent(tree: ReducedTree = this): Map[Int,Int] = {
+      def _getLeaf2Parent(current: ReducedTree, acc: List[(Int,Int)]): List[(Int,Int)] = {
+        current match {
+          case ReducedLeaf(i, n, d, g) => acc
+          case ReducedNode(i, d, l, r) => {
+            _getLeaf2Parent(l, if(!l.isLeaf()) acc else (l.loadAsLeaf().id, i) :: acc) :::
+            _getLeaf2Parent(r, if(!r.isLeaf()) acc else (r.loadAsLeaf().id, i) :: acc)
+          }
+        }
+      }
+      _getLeaf2Parent(tree, List()).toMap
+    }
+
     /**
       * Method to obtain the tree level (depth) of all nodes/leafs
       *
@@ -62,7 +86,7 @@ object ReducedKmerTreeUtils {
     def getId2Levels(tree: ReducedTree = this): Map[Int, Int] = {
       def _getId2Levels(current: ReducedTree, level: Int, acc: List[(Int, Int)]): List[(Int, Int)] = {
         current match {
-          case ReducedLeaf(a, b, c) => (a, level) :: acc
+          case ReducedLeaf(i, n, d, g) => (i, level) :: acc
           case ReducedNode(i, d, l, r) =>
             (i, level) :: (_getId2Levels(l, level + 1, acc) ::: _getId2Levels(r, level + 1, acc))
         }
@@ -82,7 +106,7 @@ object ReducedKmerTreeUtils {
       def _getLeafId2Name(current: ReducedTree, acc: List[String]): List[String] = {
         current match {
           //append value to list
-          case ReducedLeaf(a, b, c) => b :: acc
+          case ReducedLeaf(i, n, d, g) => n :: acc
           //traverse to left then right
           case ReducedNode(i, d, l, r) => (_getLeafId2Name(r, acc) ::: _getLeafId2Name(l, acc))
         }
@@ -102,7 +126,7 @@ object ReducedKmerTreeUtils {
       def _getNodeIDsPostOrder(current: ReducedTree, acc: List[Int]): List[Int] = {
         current match {
           //append value to list
-          case ReducedLeaf(a, b, c) => acc
+          case ReducedLeaf(i, n, d, g) => acc
           //traverse to left then right
           case ReducedNode(i, d, l, r) => i :: (_getNodeIDsPostOrder(r, acc) ::: _getNodeIDsPostOrder(l, acc))
         }
@@ -128,7 +152,7 @@ object ReducedKmerTreeUtils {
       def _getLeafId2Name(current: ReducedTree, acc: List[(Int, String)]): List[(Int, String)] = {
         current match {
           //append value to list
-          case ReducedLeaf(a, b, c) => (a, b) :: acc
+          case ReducedLeaf(i, n, d, g) => (i,n) :: acc
           //traverse to left then right
           case ReducedNode(i, d, l, r) => (_getLeafId2Name(r, acc) ::: _getLeafId2Name(l, acc))
         }
@@ -154,7 +178,7 @@ object ReducedKmerTreeUtils {
       def _getId2LeafNames(current: ReducedTree, acc: List[(Int, List[String])]): List[(Int, List[String])] = {
         current match {
           //append value to list
-          case ReducedLeaf(a, b, c) => (a, List(b)) :: acc
+          case ReducedLeaf(i, n, d, g) => (i, List(n)) :: acc
           //traverse to left then right
           case ReducedNode(i, d, l, r) =>
             (i, getLeafId2Name(current).map(_._2).toList.sorted) :: (_getId2LeafNames(r, acc) ::: _getId2LeafNames(l, acc))
@@ -174,7 +198,7 @@ object ReducedKmerTreeUtils {
     def getId2LargestGenome(tree: ReducedTree = this): Map[Int, Int] = {
       def _getId2LargestGenome(current: ReducedTree, acc: List[(Int, Int)]): List[(Int, Int)] = {
         current match {
-          case ReducedLeaf(a, b, c) => (a, c) :: acc
+          case ReducedLeaf(i, n, d, g) => (i, g) :: acc
           case ReducedNode(i, d, l, r) => {
             //set largest left and right sub-trees
             val downstream = _getId2LargestGenome(l, acc) ::: _getId2LargestGenome(r, acc)
@@ -196,7 +220,7 @@ object ReducedKmerTreeUtils {
       * @return Boolean
       */
     def isLeaf(tree: ReducedTree = this): Boolean = tree match {
-      case ReducedLeaf(a, b, c) => true;
+      case ReducedLeaf(i, n, d, g) => true;
       case _ => false
     }
 
@@ -231,7 +255,7 @@ object ReducedKmerTreeUtils {
     * @param name
     * @param genome_size
     */
-  case class ReducedLeaf(id: Int, name: String, genome_size: Int) extends ReducedTree
+  case class ReducedLeaf(id: Int, name: String, dist: Double, genome_size: Int) extends ReducedTree
 
   /**
     * Node of reduced kmer tree
@@ -240,8 +264,7 @@ object ReducedKmerTreeUtils {
     * @param left  Left branch of the node as Tree[A]
     * @param right Right branch of the node as Tree[A]
     */
-  case class ReducedNode(id: Int, sum_dist: Double,
-                         left: ReducedTree, right: ReducedTree) extends ReducedTree
+  case class ReducedNode(id: Int, dist: Double, left: ReducedTree, right: ReducedTree) extends ReducedTree
 
   /**
     * Reduced representation of a kmer-tree. The tree is a balanced-binary search tree storing the LCA for every kmer
@@ -261,15 +284,15 @@ object ReducedKmerTreeUtils {
       * @param counts Map[Int,Int]
       * @return Map[Int,Int]
       */
-    private def cumulativeCounts(counts: Map[Int, Int]): Map[Int, Int] = {
-      def _cumulativeCounts(current: ReducedTree, acc: Map[Int, Int]): Map[Int, Int] = {
+    private def cumulativeCounts(counts: Map[Int, Double]): Map[Int, Double] = {
+      def _cumulativeCounts(current: ReducedTree, acc: Map[Int, Double]): Map[Int, Double] = {
         current match {
-          case ReducedLeaf(a, b, c) => acc + (a -> (counts.getOrElse(a, 0)))
+          case ReducedLeaf(i, n, d, g) => acc + (i -> (counts.getOrElse(i, 0.0)))
           case ReducedNode(i, d, l, r) => {
             //get cumulative weights of children
             val updated_prop = _cumulativeCounts(l, acc) ++ _cumulativeCounts(r, acc)
             //calculate current node's weight
-            val node_weight = counts.getOrElse(i, 0) + updated_prop(l.getID()) + updated_prop(r.getID())
+            val node_weight = counts.getOrElse(i, 0.0) + updated_prop(l.getID()) + updated_prop(r.getID())
             //update acc
             updated_prop + (i -> node_weight)
           }
@@ -280,17 +303,18 @@ object ReducedKmerTreeUtils {
     }
 
     /**
-      * Obtain cumulative number of kmers under each node/leaf
-      */
-    lazy val node2totalkmers = cumulativeCounts(lca_map.map(_._2).groupBy(identity).mapValues(_.size))
-
-    /**
       * Function to compute the cumulative sum of each node/leaf for some generic count map as node/leaf ID -> count
       * by summing the counts of all the children under each node.
       *
       * @return Map[Int,Int]
       */
-    def genericCumulative: Map[Int, Int] => Map[Int, Int] = counts => cumulativeCounts(counts)
+    def genericCumulative: Map[Int, Double] => Map[Int, Double] = counts => cumulativeCounts(counts)
+
+    /**
+      * Obtain cumulative number of kmers under each node/leaf
+      */
+    lazy val node2totalkmers = cumulativeCounts(lca_map.map(_._2).groupBy(identity).mapValues(_.size))
+
   }
 
   /**

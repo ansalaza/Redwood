@@ -2,7 +2,6 @@ package utilities
 
 import java.io.File
 
-import utilities.ClusteringUtils.Matrix
 import utilities.FileHandling.{openFileWithIterator, timeStamp}
 import utilities.NumericalUtils.min
 
@@ -17,6 +16,9 @@ import scala.collection.mutable
   * Description:
   */
 object DistanceUtils {
+
+  type Matrix = Map[(String, String), Double]
+
 
   /**
     * Method to compute MASH distance given two IDs
@@ -75,6 +77,12 @@ object DistanceUtils {
     }}._1
     (matrix.toMap, index2ID.values.toList)
   }
+
+  /**
+    * Function to load only the column/row names of a given matrix
+    * @return List[String]
+    */
+  def loadMatrixColumns: File => List[String] = file => openFileWithIterator(file).next.split("\t").drop(1).toList
 
   /**
     * Method to obtain's Broder's union of two sets. In short, the smallest X hashes from the union of two sets.

@@ -1,9 +1,12 @@
 package utilities
 
 import java.io.File
+
 import boopickle.Default._
 import utilities.FileHandling._
 import utilities.SequenceUtils.ByteEncoded
+
+import scala.annotation.tailrec
 
 /**
   * Author: Alex N. Salazar
@@ -30,8 +33,42 @@ object SketchUtils {
     */
   def loadRedwoodSketch: File => RedwoodSketch = file => Unpickle[RedwoodSketch].fromBytes(deserialize(file))
 
-  //deserialize(Files.readAllBytes(Paths.get(file.getAbsolutePath))).asInstanceOf[RedwoodSketch]
+  /**
+    * Method to obtain a 3-tuple: (map of sketch id -> sketch file path, kmer length, min sketch size)
+    * @param sketches List of sketch files
+    * @return 3-tuple as described above
+    */
+  def loadSketches(sketches: List[File]): (Map[String,File], Int, Int) = {
+    @tailrec def _loadSketches(remaining: List[File],
+                               smap: Map[String,File],
+                               kmer_lengths: Set[Int],
+                               sketch_sizes: Set[Int]
+                              ): (Map[String, File], Int, Int) = {
+      remaining match {
+        case Nil => {
+          //assert single kmer length
+          assert(kmer_lengths.size == 1, "Found different kmer lengths in sketches: " + kmer_lengths.mkString(","))
+          if(sketch_sizes.size > 1)
+            println(timeStamp + "WARNING: different sketch sizes found: " + sketch_sizes.mkString(","))
+          (smap, kmer_lengths.head, sketch_sizes.min)
+        }
+        case (head::tail) => {
+          //get sketch identifier
+          val sketch = loadRedwoodSketch(head)
+          //assert uniqueness
+          assert(!smap.contains(sketch.name), "Dual instance of sketch identifier: " + sketch.name)
+          //add to set
+          _loadSketches(tail, smap + (sketch.name -> head),
+            kmer_lengths + sketch.kmer_length, sketch_sizes + sketch.sketch.size)
+        }
+      }
+    }
+    _loadSketches(sketches, Map(), Set(), Set())
+  }
 
+
+
+  /**
   /**
     * Load and verify sketches (existence, uniqueness, kmer-length compatability) for given list of files
     *
@@ -139,4 +176,5 @@ object SketchUtils {
       min_sketch_size._1
     }
   }
+    */
 }

@@ -1,15 +1,16 @@
 package utilities
 
-import java.io.File
-
-import doodle.core.{Color, Image}
-import doodle.core.Image.{openPath, text}
+import doodle.core.{Color, Image, allAbove, allBeside}
+import doodle.core.Image.{openPath, text, rectangle}
 import doodle.core.Color.hsl
 import doodle.syntax._
 import doodle.core.PathElement.{lineTo, moveTo}
 import doodle.core.font.Font
-import utilities.FileHandling.openFileWithIterator
+import doodle.core.font.FontFace.Bold
+import doodle.core.font.FontFamily.Monospaced
+import doodle.core.font.FontSize.Points
 import utilities.ReducedKmerTreeUtils._
+import vizualization.TreeTracing.Config
 
 /**
   * Author: Alex N. Salazar
@@ -28,16 +29,22 @@ object TreeDrawingUtils {
     * Method to draw tree given a tree, font specification, and a map of all node/leafs x,y coords
     *
     * @param tree
-    * @param font
     * @param node2Coords
     * @return Image
     */
   def treeDrawer(tree: ReducedTree,
-                 font: Font,
-                 text_offset: Int,
+                 config: Config,
                  node2Coords: Map[Int, (Double, Double)],
+                 withNodeID: Boolean = false,
                  node2Proportions: Map[Int, Double] = Map(),
-                 node2Colour: Map[Int, Color] = Map()): Image = {
+                 node2Colour: Map[Int, Color] = Map(),
+                 matrix: Map[(String, String), Double] = Map()): Image = {
+
+    /**
+      * Set font and text offset
+      */
+    val font = Font(Monospaced, Bold, Points(config.fontSize))
+    val text_offset = config.fontSize / 2
 
     def drawSubBranch(from: (Double, Double),
                       to: (Double, Double),
@@ -59,7 +66,7 @@ object TreeDrawingUtils {
       */
     def _treeDrawer(current: ReducedTree, acc: Image): Image = {
       current match {
-        case ReducedLeaf(a,b,c) => acc
+        case ReducedLeaf(i, n, d, g) => acc
         case ReducedNode(i, d, l, r) => {
           //update left right subtree
           val updated_image = _treeDrawer(l, acc).on(_treeDrawer(r, acc))
@@ -74,7 +81,10 @@ object TreeDrawingUtils {
             //get color
             val node_colour = node2Colour.getOrElse(i, default_color)
             //updated with node
-            val updated_with_node =
+            val updated_with_node ={
+              if(!withNodeID) updated_image
+              else (text(i.toString).font(font)).fillColor(node_colour).at(x + text_offset, y).on(updated_image)
+            }
               (text(i.toString).font(font)).fillColor(node_colour).at(x + text_offset, y).on(updated_image)
             //get left and right line-widths
             val (left_width, right_width) = (node2Proportions(l.getID()), node2Proportions(r.getID()))
@@ -107,16 +117,15 @@ object TreeDrawingUtils {
       }
     }
 
-
     //get root coordinates
     val (rx, ry) = node2Coords(tree.getID())
     //draw rooted line
     val rooted = openPath(List(moveTo(rx, ry), lineTo(rx - 50, ry))).lineWidth(node2Proportions(tree.getID()))
-
-    rooted.beside(
+    //draw tree
+    val tree_drawing = rooted.beside(
       _treeDrawer(tree, Image.empty).beside(
         //iterate through leafs and draw sample names
-        tree.getLeafId2Name().foldLeft(Image.empty){case(acc, (id,name)) => {
+        tree.getLeafId2Name().foldLeft(Image.empty) { case (acc, (id, name)) => {
           val leaf_prop = node2Proportions(id)
           //get x, y coordinates
           val y_coord = node2Coords(id)._2
@@ -124,9 +133,39 @@ object TreeDrawingUtils {
           val colour = node2Colour.getOrElse(id, default_color)
           //draw leaf on y coord
           (if (leaf_prop == 0.0) Image.empty else (text(name).font(font).fillColor(colour))).at(0, y_coord).on(acc)
-        }}
+        }
+        }
       )
     )
+    //no matrix to add, return tree
+    if (matrix.isEmpty) tree_drawing
+    //add matrix
+    else {
+      //get post order of leafs
+      val order = tree.getLeafNamesPostOrder().reverse
+      //get leaf name -> ID
+      val leafname2ID = tree.getLeafId2Name().map(_.swap)
+      //set rectangle height and width
+      val (rheight, rwidth) = (config.canvasWidth.toDouble / order.size, config.canvasWidth.toDouble / order.size)
+      tree_drawing.beside(order.foldLeft(Image.empty)((acc, row) => {
+        //get coords
+        val coords = node2Coords(leafname2ID(row))
+        allBeside(order.map(column => {
+          //set box
+          val box = rectangle(rwidth, rheight).noLine
+          //set color
+          val color = Color.red
+          //same sample, set color to white
+          if (row == column) box.fillColor(color)
+          else {
+            //fetch matrix value
+            val dist = matrix.getOrElse((row, column), matrix(column, row))
+            //set color to matrix
+            box.fillColor(color.fadeOut(dist.normalized))
+          }
+        })).at(0, coords._2).on(acc)
+      }))
+    }
   }
 
   /**
@@ -135,10 +174,7 @@ object TreeDrawingUtils {
     * @param tree
     * @return Map[String, (Double,Double)]
     */
-  def getCoords(tree: ReducedTree,
-                canvas: (Int, Int),
-                normalize: (Int, Double) => Double
-               ): Map[Int, (Double, Double)] = {
+  def getCoords(tree: ReducedTree, canvas: (Int, Int)): Map[Int, (Double, Double)] = {
     //get total number of leafs
     val total_leafs = tree.getLeafId2Name().size
     //get the vertical y-coordinate step based on total leafs
@@ -153,24 +189,22 @@ object TreeDrawingUtils {
       * @param acc
       * @return
       */
-    def _getCoords(current: ReducedTree,
-                   acc: Map[Int, (Double, Double)]): Map[Int, (Double, Double)] = {
+    def _getCoords(current: ReducedTree, dist: Double, acc: Map[Int, (Double, Double)]): Map[Int, (Double, Double)] = {
       //check current (sub)tree
       current match {
         //leaf, add x,y coord
-        case ReducedLeaf(a,b,c) => acc + (a -> (canvas._1, leaf2ycoord(b)))
+        case ReducedLeaf(i, n, d, g) => acc + (i -> ((d + dist), leaf2ycoord(n)))
         //node
         case ReducedNode(i, d, l, r) => {
           //Update left and right sub-trees
-          val updated_acc = _getCoords(l, acc) ++ _getCoords(r, acc)
+          val updated_acc = _getCoords(l, d + dist, acc) ++ _getCoords(r, d + dist, acc)
           //set y-coord as average of left and right
           val y_coord = (updated_acc(l.getID())._2 + updated_acc(r.getID())._2) / 2
           //add x, y coord
-          updated_acc + (i -> (normalize(i, d), y_coord))
+          updated_acc + (i -> ((d + dist), y_coord))
         }
       }
     }
-
-    _getCoords(tree, Map())
+    _getCoords(tree, 0.0, Map())
   }
 }

@@ -1,3 +1,4 @@
+/**
 package utilities
 
 import java.io.File
@@ -6,6 +7,7 @@ import utilities.FileHandling.timeStamp
 import utilities.ClusteringUtils._
 import utilities.KmerTreeUtils.{Kmers, Leaf, Node, Tree}
 import utilities.SketchUtils.{loadRedwoodSketch}
+import atk.ProgressBar.progress
 
 /**
   * Author: Alex N. Salazar
@@ -23,7 +25,8 @@ class Dendogram(val matrix: Matrix,
                 val clusters: Clusters,
                 val leaf2sketches: Map[String, File],
                 val min_sketch_size: Int,
-                val kmer_length: Int) {
+                val kmer_length: Int,
+                val verbose: Boolean) {
 
   /**
     * Function to obtain distance of a given pair of IDs aware that the matrix only stores distances in upper-diagonal
@@ -82,15 +85,26 @@ class Dendogram(val matrix: Matrix,
     def isInvolved: String => Boolean = x => x == a || x == b
 
     /**
-      * Function to obtain the min distance (single-linkage) for a given cluster ID based on the IDs of the clusters
+      * Generate all possible tuple configurations in which a given ID can exist in the matrix map with the either of
+      * the cluster IDs being merged. There are 4 different ways:
+      * ----(node_id, a), (node_id, b), (a, node_id), (b, node_id)
+      * @return List[(String,String)]
+      */
+    def allPossibleTuples: String => List[(String,String)] = id => List((id, a), (id,b), (a,id),(b,id))
+
+    /**
+      * Function to obtain the min distance (single-linkage) between a given cluster ID and the IDs of the clusters
       * being merged
       *
-      * @return
+      * @return Double
       */
     def singleLinkDist: String => Double = node_id => {
-      matrix.filter { case ((x, y), dist) =>
-        (x == node_id || y == node_id) && (isInvolved(x) || isInvolved(y))
-      }.minBy(_._2)._2
+      //set infinity
+      val infinity = Double.MaxValue
+      //get min distance
+      val min_dist = allPossibleTuples(node_id).map(x => matrix.getOrElse(x, infinity)).min
+      assert(min_dist != infinity)
+      min_dist
     }
 
     /**
@@ -114,7 +128,7 @@ class Dendogram(val matrix: Matrix,
           //adjust kmers based on minimum sketch size, if needed
           val kmers = {
             //min sketch size is same as current sketch size
-            if(min_sketch_size == sketch_size) sketch.sketch.keySet
+            if (min_sketch_size == sketch_size) sketch.sketch.keySet
             //adjust sketch by getting X smallest kmers (X = min sketch size)
             else {
               println(timeStamp + "-----Adjusting sketch to size " + min_sketch_size + " for " + sketch.name)
@@ -125,8 +139,10 @@ class Dendogram(val matrix: Matrix,
         }
       }
 
+      if (verbose) println(timeStamp + "--Loading clusters")
       //get trees for each cluster
       val (at, bt) = (clusters(a), clusters(b))
+      if (verbose) println(timeStamp + "--Loading sketches, if any")
       //load sketches
       val (as, bs) = (loadInfo(at), loadInfo(bt))
       //get node intersection if either node is a leaf
@@ -137,6 +153,7 @@ class Dendogram(val matrix: Matrix,
       if (!clusters(b).isLeaf()) tmp else tmp + (b -> Leaf(bs._1.diff(parent_kmers), b, bs._2, bs._3))
     }
 
+    if (verbose) println(timeStamp + "--Updating clusters")
     //create new array of labels by removing old nodes and appending new cluster to front of array wit updated index
     val new_clusters = {
       //update clusters with leafs, if needed
@@ -155,23 +172,24 @@ class Dendogram(val matrix: Matrix,
       filtered + (id.toString -> new_cluster)
     }
 
+    if (verbose) println(timeStamp + "--Updating matrix")
     //create new matrix by re-calculating distances using single-linkage
     val new_matrix = {
-      //remove old matrix entry of the clusters being merged
-      matrix.filterNot(x => isInvolved(x._1._1) && isInvolved(x._1._2))
-        //update single-linkage distance
-        .map { case ((x, y), dist) => {
-        //current distance does not involve clusters being merged, leave as is
-        if (!(isInvolved(x) || isInvolved(y))) ((x, y), dist)
-        //update with single linkage
+      //iterate through current clusters IDs using matrix with the distances of clusters being merged removed
+      clusters.keys.foldLeft(matrix - ((a,b)))((updated_matrix, cluster_id) => {
+        //current cluster is one of the clusters being merged, move on
+        if(isInvolved(cluster_id)) updated_matrix
         else {
+          //set new cluster ID
           val nid = id.toString
-          //set new ids for matrix entry get id of the cluster not part of the ones being merged
-          val (new_ids, not_merged_id) = if (isInvolved(x)) ((y, nid), y) else ((x, nid), x)
-          (new_ids, singleLinkDist(not_merged_id))
+          //get tuple configuration that exists in the matrix map
+          val existing_tuple_id = allPossibleTuples(cluster_id).filter(x => matrix.contains(x))
+          assert(existing_tuple_id.size == 2, existing_tuple_id)
+          //update with single linkage clustering
+          existing_tuple_id.foldLeft(updated_matrix)((acc, old) => acc - old) +
+            ((nid, cluster_id) -> singleLinkDist(cluster_id))
         }
-      }
-      }
+      })
     }
     //return new matrix and clusters
     (new_matrix, new_clusters)
@@ -179,3 +197,4 @@ class Dendogram(val matrix: Matrix,
 
 }
 
+*/

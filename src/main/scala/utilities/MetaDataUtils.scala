@@ -41,7 +41,7 @@ object MetaDataUtils {
     * @param max_width
     * @return Map[Int,Double]
     */
-  def loadQueryFile(file: File, max_width: Int): Map[Int, Double] = {
+  def loadQueryFile(file: File, max_width: Double): Map[Int, Double] = {
     openFileWithIterator(file).drop(1).toList.foldLeft(Map[Int, Double]())((acc, line) => {
       val columns = line.split("\t")
       acc + (columns.head.toInt -> (columns(2).toDouble * max_width))
@@ -53,11 +53,13 @@ object MetaDataUtils {
     * @param file
     * @return
     */
-  def loadQueryLabelFile(file: File): Map[String, Double] = {
-    openFileWithIterator(file).drop(1).toList.foldLeft(Map[String, Double]())((acc, line) => {
+  def loadQueryLabelFile(file: File): (String, Map[String, Double]) = {
+    val m = openFileWithIterator(file).drop(1).toList.foldLeft((Map[String, Double](), Set[String]()))((acc, line) => {
       val columns = line.split("\t")
-      acc + (columns.head -> (columns(2).toDouble))
+      (acc._1 + (columns(1) -> (columns(2).toDouble)), acc._2 + columns.head)
     })
+    assert(m._2.size == 1, "Expected identical names but found different ones: " + m._2.mkString(","))
+    (m._2.head, m._1)
   }
 
 }

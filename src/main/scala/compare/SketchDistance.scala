@@ -3,7 +3,7 @@ package compare
 import java.io.{File, PrintWriter}
 
 import utilities.FileHandling.{openFileWithIterator, timeStamp, verifyDirectory}
-import utilities.SketchUtils.loadVerifySketches
+import utilities.SketchUtils.{loadSketches, loadRedwoodSketch}
 import utilities.DistanceUtils._
 import utilities.NumericalUtils.choose
 import atk.ProgressBar.progress
@@ -55,16 +55,16 @@ object SketchDistance {
       verifyDirectory(config.outputDir)
       //get list of sketches from input parameter
       println(timeStamp + "Loading sketches")
-      val (all_sketches, kmer_length) = {
+      val (all_sketches, kmer_length, sketch_size) = {
         if (config.sketchFiles == null && config.pathsFile == null) {
           assert(false, "Provide sketch files through '--sketch-files' or '--paths-file'")
-          (Map[String, Set[Int]](), 0)
+          (Map[String, File](), 0, 0)
         }
-        else if (config.sketchFiles != null) loadVerifySketches(config.sketchFiles.toList)
-        else loadVerifySketches(openFileWithIterator(config.pathsFile).toList.map(x => new File(x)))
+        else if (config.sketchFiles != null) loadSketches(config.sketchFiles.toList)
+        else loadSketches(openFileWithIterator(config.pathsFile).toList.map(x => new File(x)))
       }
       assert(config.threads > 0, "Number of threads specified is a non-positive integer")
-      sketchDistance(all_sketches, kmer_length, config)
+      sketchDistance(all_sketches.mapValues(loadRedwoodSketch(_).sketch.keySet), kmer_length, config)
     }
   }
 

@@ -1,12 +1,12 @@
+/**
 package reference_population
-
 import java.io._
 
 import boopickle.Default._
 import utilities.FileHandling.{timeStamp, verifyDirectory, verifyFile, writeSerialized, openFileWithIterator}
 import utilities.ClusteringUtils.{createDendogram, hierchicalClustering}
 import utilities.SketchUtils.{isKmerLengthCompatible, isUniqueNameCompatible, constructSketchesMap}
-import utilities.DistanceUtils.loadMatrix
+import utilities.DistanceUtils.loadMatrixColumns
 
 /**
   * Author: Alex N. Salazar
@@ -55,26 +55,33 @@ object ConstructPopulationTree {
   def constructPopulationTree(config: Config): Unit = {
     //perfom hierchical clustering of given distance matrix
     val reduced_kmer_tree = {
-      println(timeStamp + "Verifying sketches")
-      val all_sketches = openFileWithIterator(config.sketchesFile).toList.map(new File(_))
-      //first verify files actually exist
-      all_sketches.foreach(verifyFile(_))
-      //then, verify kmer length compatability
-      val universal_kmer_length = isKmerLengthCompatible(all_sketches)
-      println(timeStamp + "Using universal kmer-length of " + universal_kmer_length)
-      //then, verify unique name
-      val sketch_names = isUniqueNameCompatible(all_sketches)
       println(timeStamp + "Loading distance matrix")
-      val (matrix, columns) = loadMatrix(config.matrix)
-      //assert all leaf and sketch names are accounted for
-      assert(sketch_names.size == columns.size, "Not all samples/sketches are accounted for: " +
-        sketch_names.size + " sketches vs " + columns.size + " columns")
-      println(timeStamp + "--Loaded matrix with " + columns.size + " samples and " + matrix.size + " values")
-      //create initial dendogram
-      val dendo = {
-        createDendogram(matrix, sketch_names, universal_kmer_length,
-          constructSketchesMap(config.sketchesFile), config.verbose)
+      //load matrix
+      val columns = loadMatrixColumns(config.matrix)
+      println(timeStamp + "--Loaded matrix with " + columns.size + " samples")
+      //load sketches, if any
+      val (all_sketches, universal_kmer_length) = {
+        if(config.sketchesFile == null) (List[File](), -1)
+        else {
+          println(timeStamp + "Verifying sketches")
+          val tmp = openFileWithIterator(config.sketchesFile).toList.map(new File(_))
+          //first verify files actually exist
+          tmp.foreach(verifyFile(_))
+          println(timeStamp + "--Checking name uniqueness")
+          //then, verify unique name
+          val names = isUniqueNameCompatible(tmp)
+          //assert all leaf and sketch names are accounted for
+          assert(names.size == columns.size, "Not all samples/sketches are accounted for: " +
+            names.size + " sketches vs " + columns.size + " columns")
+          //then, verify kmer length compatability
+          val kmer_length = isKmerLengthCompatible(tmp)
+          println(timeStamp + "--Using universal kmer-length of " + kmer_length)
+          (tmp, kmer_length)
+        }
       }
+      println(timeStamp + "Initializing dendogram")
+      //create initial dendogram
+      val dendo = createDendogram(config.matrix, universal_kmer_length, constructSketchesMap(config.sketchesFile), config.verbose)
       println(timeStamp + "Clustering samples and constructing kmer-tree")
       hierchicalClustering(dendo, 0, config.verbose)
     }
@@ -84,3 +91,4 @@ object ConstructPopulationTree {
     println(timeStamp + "Successfully completed!")
   }
 }
+  */
