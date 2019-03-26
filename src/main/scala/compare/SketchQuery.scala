@@ -22,7 +22,8 @@ object SketchQuery {
                      prefix: String = null,
                      outputDir: File = null,
                      labelsFile: File = null,
-                     sketchesFile: File = null
+                     sketchesFile: File = null,
+                     normalize: Boolean = false
                    )
 
   def main(args: Array[String]) {
@@ -47,6 +48,9 @@ object SketchQuery {
       opt[File]("labels") action { (x, c) =>
         c.copy(labelsFile = x)
       } text ("Tab-delimited file containing: sample ID, label. Output will contain summary information per label")
+      opt[Unit]("normalize") action { (x,c) =>
+        c.copy(normalize = true)
+      } text ("Normalize queries to non-unique proportion.")
     }
     parser.parse(args, Config()).map { config =>
       //check whether output directory exists. If not, create it.
@@ -108,7 +112,9 @@ object SketchQuery {
         else (acc_counts + (node.get -> (acc_counts.getOrElse(node.get, 0.0) + 1)), acc_total + 1)
       }}
     }}
+    //scores.toList.sortBy(_._2).foreach(x => println(x._1 + "\t" + x._2))
     //compute branch proportions based on scores above
+    ktree.genericCumulative(scores).toList.sortBy(-_._2).foreach(x => println(x._1 + "\t" + x._2))
     val branch_proportions = ktree.genericCumulative(scores).mapValues(_ / total_kmers)
     //explained percentage
     val explained_percentage = scores.foldLeft(0.0)((b, a) => a._2 + b) / total_kmers
@@ -152,8 +158,11 @@ object SketchQuery {
       //create output file
       val pw2 = new PrintWriter(config.outputDir + "/" + config.prefix + ".labels.txt")
       pw2.println("Name\tLabel\tWeight")
-      label2Scores.foreach(x => pw2.println(config.prefix + "\t" + x._1 + "\t" + x._2))
-      pw2.println(config.prefix + "\tUnique\t" + (1.0 - explained_percentage))
+      label2Scores.foreach(x => {
+        val denom = if (!config.normalize) 1.0 else explained_percentage
+        pw2.println(config.prefix + "\t" + x._1 + "\t" + x._2 / denom)
+      })
+      if(!config.normalize) pw2.println(config.prefix + "\tUnique\t" + (1.0 - explained_percentage))
       pw2.close
     }
 
@@ -201,15 +210,21 @@ object SketchQuery {
   def constructNode2Labels(file: File, tree: ReducedTree): Map[Int, Map[String, Double]] = {
     //construct map as node -> List(labels)
     val node2labels = {
+      //get all leaf IDs
+      val leafID2name = tree.getLeafId2Name()
       //open labels file
       val leafname2label = openFileWithIterator(file).toList.map(x => {
         val c = x.split("\t");
         (c.head, c(1))
       }).toMap
       //sanity check
-      assert(leafname2label.size == tree.getLeafId2Name().size, "Unexpected number of leafs found in labels file")
+      assert(leafname2label.size == leafID2name.size, "Unexpected number of leafs found in labels file")
+      println(tree.node2Children())
+      println()
+      println(tree.node2Children().mapValues(_.filter(leafID2name.contains(_))))
       //construct node -> labels
-      tree.getId2LeafNames().mapValues(_.map(leafname2label(_)))
+      tree.node2Children().mapValues(_.filter(leafID2name.contains(_)))
+        .mapValues(_.map(x => leafname2label(leafID2name(x))))
     }
     //assign weights to the labels of each node
     node2labels.mapValues(x => {

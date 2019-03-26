@@ -43,9 +43,12 @@ object TreeMetrics {
     println(timeStamp + "Loading kmer-tree")
     val ktree = loadReducedKmerTree(config.kmerTree)
     //get leaf id -> name
-    val leafsid2name = ktree.tree.getLeafId2Name()
-    //get node -> leaf names
-    val node2leafs = ktree.tree.getId2LeafNames().mapValues(_.size)
+    val leafID2Name = ktree.tree.getLeafId2Name()
+    //get node -> leaf names counts
+    val (node2Leafs, node2Chilren) = {
+      val tmp = ktree.tree.node2Children()
+      (tmp.mapValues(x => x.filter(leafID2Name.contains(_)).size), tmp.mapValues(_.size))
+    }
     //get all nodes
     val nodes = ktree.tree.getNodeIDsPostOrder().size
     //get all leafs
@@ -57,11 +60,12 @@ object TreeMetrics {
     //create output file
     val pw = new PrintWriter(config.outputDir + "/" + config.prefix + ".txt")
     //output header
-    pw.println("ID\tName\tLeafs\tKmers")
+    pw.println("ID\tName\tNodes\tLeafs\tKmers")
     //output metrics
-    node2kmers.foreach(node => {
-      val name = leafsid2name.get(node._1)
-      pw.println(node._1 + "\t" + (if(name.isEmpty) "" else name.get) + "\t" + node2leafs(node._1) + "\t" + node._2)
+    node2kmers.toList.sortBy(_._2).foreach(node => {
+      val name = leafID2Name.get(node._1)
+      pw.println(node._1 + "\t" + (if(name.isEmpty) "" else name.get) + "\t" + node2Chilren(node._1) + "\t" +
+        node2Leafs(node._1) + "\t" + node._2.toInt)
     })
     pw.close
     println(timeStamp + "Successfully completed!")

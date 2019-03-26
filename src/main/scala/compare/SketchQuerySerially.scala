@@ -19,7 +19,8 @@ object SketchQuerySerially {
                      prefix: String = null,
                      outputDir: File = null,
                      labelsFile: File = null,
-                     sketchesFile: File = null
+                     sketchesFile: File = null,
+                     normalize: Boolean = false,
                    )
 
   def main(args: Array[String]) {
@@ -37,6 +38,9 @@ object SketchQuerySerially {
       opt[File]("labels") action { (x, c) =>
         c.copy(labelsFile = x)
       } text ("Tab-delimited file containing: sample ID, label. Output will contain summary information per label")
+      opt[Unit]("normalize") action { (x,c) =>
+        c.copy(normalize = true)
+      } text ("Normalize queries to non-unique proportion.")
     }
     parser.parse(args, Config()).map { config =>
       //check whether output directory exists. If not, create it.
@@ -64,7 +68,9 @@ object SketchQuerySerially {
       //get sketch name
       val name = loadRedwoodSketch(sketch).name
       //query current sketch
-      SketchQuery.querySketch(new SketchQuery.Config(sketch, config.kmerTree, name, config.outputDir, config.labelsFile), ktree)
+      SketchQuery.querySketch(
+        new SketchQuery.Config(sketch, config.kmerTree, name, config.outputDir, config.labelsFile, null, config.normalize),
+        ktree)
     })
   }
 

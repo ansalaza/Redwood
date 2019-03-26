@@ -81,11 +81,10 @@ object TreeDrawingUtils {
             //get color
             val node_colour = node2Colour.getOrElse(i, default_color)
             //updated with node
-            val updated_with_node ={
-              if(!withNodeID) updated_image
+            val updated_with_node = {
+              if (!withNodeID) updated_image
               else (text(i.toString).font(font)).fillColor(node_colour).at(x + text_offset, y).on(updated_image)
             }
-              (text(i.toString).font(font)).fillColor(node_colour).at(x + text_offset, y).on(updated_image)
             //get left and right line-widths
             val (left_width, right_width) = (node2Proportions(l.getID()), node2Proportions(r.getID()))
             //both sub-branches are empty, move on

@@ -1,5 +1,7 @@
 package utilities
 
+import scala.math.BigDecimal
+
 /**
   * Author: Alex N. Salazar
   * Created on 16-1-2019
@@ -10,6 +12,14 @@ package utilities
 object NumericalUtils {
 
   import Numeric.Implicits._
+
+  /**
+    * Function to round double to 2-decimal points
+    * @return Double
+    */
+  def round: Double => Double = value => BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+  def multiplyList: List[Int] => Int = values => values.foldLeft(1)((acc,x) => acc * x)
 
   /**
     * Recursive method to compute binomial coefficient

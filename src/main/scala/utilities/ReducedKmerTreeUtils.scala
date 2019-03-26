@@ -160,7 +160,7 @@ object ReducedKmerTreeUtils {
 
       _getLeafId2Name(tree, List()).toMap
     }
-
+    /*
     /**
       * Method to obtain all leaf names under each node/leaf
       *
@@ -186,6 +186,20 @@ object ReducedKmerTreeUtils {
       }
 
       _getId2LeafNames(tree, List()).toMap
+    }
+    */
+
+    def node2Children(tree: ReducedTree = this): Map[Int, List[Int]] = {
+      def _node2Children(current: ReducedTree, acc: Map[Int, List[Int]]): Map[Int, List[Int]] = {
+        current match {
+          case ReducedLeaf(i, n, d, g) => acc + (i -> List(i))
+          case ReducedNode(i, d, l, r) =>{
+            val updated = _node2Children(l, acc) ++ _node2Children(r, acc)
+            updated + (i -> updated.keys.toList)
+          }
+       }
+      }
+      _node2Children(tree, Map())
     }
 
     /**

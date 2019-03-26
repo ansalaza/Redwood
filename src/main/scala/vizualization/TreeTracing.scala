@@ -69,7 +69,7 @@ object TreeTracing {
         c.copy(equalDist = true)
       } text ("Force equal branch distances.")
       opt[Unit]("include-id") action { (x, c) =>
-        c.copy(equalDist = true)
+        c.copy(withNodeID = true)
       } text ("Include node IDs in tree.")
       opt[Int]("font-size") action { (x, c) =>
         c.copy(fontSize = x)
@@ -128,8 +128,10 @@ object TreeTracing {
         //sanity check
         assert(missing_leafs.isEmpty, "Could not find colour mapping for the following IDs: " + missing_leafs
           .mkString(","))
+        val leafID2Name = reduced_tree.tree.getLeafId2Name()
         //add node colour by determining whether a given node contains leafs of all the same color
-        reduced_tree.tree.getId2LeafNames().foldLeft(List[(Int, Color)]()) { case (acc, (id, leafs)) => {
+        reduced_tree.tree.node2Children().mapValues(x => x.filter(leafID2Name.contains(_)).map(leafID2Name(_)))
+          .foldLeft(List[(Int, Color)]()) { case (acc, (id, leafs)) => {
           //get all colours in current node
           val color_set = leafs.map(tmp(_)).toSet
           if (color_set.size > 1) acc else (id, color_set.head) :: acc

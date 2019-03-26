@@ -4,7 +4,9 @@ import java.io.File
 
 import utilities.FileHandling.{openFileWithIterator, timeStamp}
 import utilities.NumericalUtils.min
+import utilities.SketchUtils.loadRedwoodSketch
 
+import scala.annotation.tailrec
 import scala.math.log
 import scala.collection.mutable
 
@@ -42,7 +44,7 @@ object DistanceUtils {
     *
     * @return Double
     */
-  def fetchDistance(distance_map: Map[(String, String), Double])(x: String, y: String): Double = {
+  def fetchDistance(distance_map: Map[(Int, Int), Double])(x: Int, y: Int): Double = {
     //check forward order, if not, swap order
     if (distance_map.contains((x, y))) distance_map((x, y)) else distance_map((y, x))
   }
@@ -144,6 +146,8 @@ object DistanceUtils {
     //set broder_union
     val broder_union = union_pq.toSet
     assert(broder_union.size == min_sketch_size)
+    isInUnion.clear()
+    union_pq.clear()
     //return Broder's union
     broder_union
   }
