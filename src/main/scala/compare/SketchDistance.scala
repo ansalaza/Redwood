@@ -22,7 +22,7 @@ object SketchDistance {
                      sketchesFile: File = null,
                      outputDir: File = null,
                      prefix: String = null,
-                     fullJI: Boolean = false,
+                     jd: Boolean = false,
                      log: Int = 1000
                    )
 
@@ -38,9 +38,9 @@ object SketchDistance {
         c.copy(prefix = x)
       } text ("Prefix for output matrix file.")
       note("\nOPTIONAL\n")
-      opt[Unit]("full-ji") action { (x, c) =>
-        c.copy(fullJI = true)
-      } text ("Do not express Jaccard Index as average genome size.")
+      opt[Unit]("jd") action { (x, c) =>
+        c.copy(jd = true)
+      } text ("Express distance as Jaccard-distance instead of MASH-distance.")
       opt[Int]("log") hidden() action { (x, c) =>
         c.copy(log = x)
       } text ("Log process value.")
@@ -68,7 +68,7 @@ object SketchDistance {
     val name2IDs = sketches.keySet.zipWithIndex.toMap
     //reverse above
     val id2Names = name2IDs.map(_.swap)
-    println(timeStamp + "Found " + sketches.size + " sketches with kmer-length of " + klength + " and sketch " +
+    println(timeStamp + "Found " + sketches.size + " sketches with kmer-length of " + klength + " and min-sketch-" +
       "size of " + sketch_size)
     //set temp file
     val temp_file = new File(config.outputDir + "/.distances.tmp")
@@ -89,7 +89,7 @@ object SketchDistance {
             //load target kmers
             val target_kmers = loadRedwoodSketch(sketches(target_name)).sketch.keySet
             //map as tuple of ids with mash distance
-            pw_temp.println(subj_id + "\t" + target_id + "\t" + computeMashDist(subj_kmers, target_kmers, klength))
+            pw_temp.println(subj_id + "\t" + target_id + "\t" + computeDistance(subj_kmers, target_kmers, klength, config.jd))
           })
           //compute mash distances in parallel (uses all threads) and move on with next
           computePairwiseDist(targets)
@@ -116,7 +116,8 @@ object SketchDistance {
     //create distance matrix
     val pw = new PrintWriter(config.outputDir + "/" + config.prefix + ".matrix")
     //set name order
-    val names = name2IDs.keySet
+    val names = name2IDs.keySet.toList.sorted
+
     //output header
     pw.println("$\t" + names.mkString("\t"))
     //iterate through each pairwise interaction in defined order and create rows

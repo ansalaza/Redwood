@@ -23,19 +23,22 @@ object DistanceUtils {
 
 
   /**
-    * Method to compute MASH distance given two IDs
-    *
+    * Method to compute either MASH or jaccard distance of two sets.
+    * @param x Set of hashes
+    * @param y Set of hashes
+    * @param k Kmer-length
+    * @param jd Compute jaccard distance (false by default)
     * @return Double
     */
-  def computeMashDist: (Set[Int], Set[Int], Int) => Double = (x, y, kmer_length) => {
+  def computeDistance(x: Set[Int], y: Set[Int], k: Int, jd: Boolean = false): Double = {
     //compute union
     val union = broderUnion(x, y)
     //compute intersection
     val intersect = union.filter(kmer => x(kmer) && y(kmer)).size.toDouble
-    //compute jaccard distance
+    //compute jaccard index
     val ji = (intersect / union.size)
-    //compute mash distance
-    (-1.0 / kmer_length) * log((2 * ji) / (1 + ji))
+    //compute jaccard distance of mash distance
+    if(jd) 1 - ji else (-1.0 / k) * log((2 * ji) / (1 + ji))
   }
 
   /**

@@ -35,6 +35,10 @@ object BuildSketchUsingCluster {
       opt[File]("redwood-binary") required() action { (x, c) =>
         c.copy(redwoodBinary = x)
       } text ("Full path to redwood jar file.")
+      opt[File]("cluster-config") required() action { (x, c) =>
+        c.copy(clusterConfig = x)
+      } text ("Scheduler configuration file. Sketeches can be computed in parallel via a cluster scheduler if a " +
+        "configuration file is provided with the native scheduler parameters. See README.md for format specification.")
       opt[File]('o', "output-directory") required() action { (x, c) =>
         c.copy(outputDir = x)
       } text ("Output directory. If it doesn't not exist, the directory will be created.")
@@ -57,10 +61,6 @@ object BuildSketchUsingCluster {
       opt[Int]("memory") action { (x, c) =>
         c.copy(maxMemory = x)
       } text ("Max memory for JVM in mb (default is 2000).")
-      opt[File]("cluster-config") required() action { (x, c) =>
-        c.copy(clusterConfig = x)
-      } text ("Scheduler configuration file. Sketeches can be computed in parallel via a cluster scheduler if a " +
-        "configuration file is provided with the native scheduler parameters. See README.md for format specification.")
 
     }
     parser.parse(args, Config()).map { config =>
